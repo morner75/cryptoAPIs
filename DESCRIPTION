@@ -1,0 +1,27 @@
+Package: cryptoAPIs
+Type: Package
+Title: Cryptocurrency Exchange API Client
+Version: 0.1.0
+Authors@R: person("Your Name", email = "you@example.com", role = c("aut", "cre"))
+Description: Provides tidy wrappers for cryptocurrency exchange REST APIs
+    including Upbit, Bithumb, GOPAX, Coinone, Korbit, Binance, Coinbase, and OKX.
+    Functions cover trading pair lookup, recent OHLCV data, historical range
+    data, and market risk alarm retrieval.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: false
+Imports:
+    httr,
+    httr2,
+    jsonlite,
+    dplyr,
+    tibble,
+    stringr,
+    purrr,
+    lubridate
+Suggests:
+    chromote,
+    rvest,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.3
