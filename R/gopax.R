@@ -98,6 +98,77 @@ fetch_gopax <- function(market, count = 200) {
 }
 
 
+#' Get real-time orderbook (호가) data from GOPAX
+#'
+#' @description
+#' Retrieves the current orderbook for a given market from the GOPAX public
+#' API. Returns one row per price level (ask/bid paired), sorted by ask price
+#' ascending.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param count Integer. Number of price levels to retrieve (default `30`).
+#' @param level Integer. Price aggregation unit (default `0`, no aggregation).
+#'   Passed to the API as-is for KRW markets.
+#'
+#' @return A [data.frame] with columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`, e.g. `"BTC-KRW"`)}
+#'     \item{timestamp}{POSIXct request time in KST (GOPAX does not return a timestamp)}
+#'     \item{ask_price}{Ask price at this level}
+#'     \item{bid_price}{Bid price at this level}
+#'     \item{ask_size}{Ask volume at this level}
+#'     \item{bid_size}{Bid volume at this level}
+#'     \item{total_ask_size}{Total ask volume across all levels}
+#'     \item{total_bid_size}{Total bid volume across all levels}
+#'     \item{level}{Applied price aggregation tier}
+#'   }
+#'   Returns `NULL` on error or when the market is not found.
+#'
+#' @examples
+#' \dontrun{
+#' get_gopax_orderbook("BTC-KRW")
+#' get_gopax_orderbook("ETH-KRW", count = 5)
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% arrange
+#' @export
+get_gopax_orderbook <- function(market, count = 30, level = 0) {
+  sym <- gopax_trading_pairs(market)
+  if (is.null(sym)) { message("고팍스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  url <- paste0("https://api.gopax.co.kr/trading-pairs/", sym, "/book")
+  tryCatch({
+    res <- GET(url,
+               add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+               timeout(10))
+    if (status_code(res) != 200) {
+      message("고팍스 HTTP 오류: ", status_code(res), " / ", market)
+      return(NULL)
+    }
+    parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), simplifyVector = TRUE)
+    asks <- parsed$ask
+    bids <- parsed$bid
+    if (is.null(asks) || is.null(bids)) return(NULL)
+    n    <- min(nrow(asks), nrow(bids), count)
+    asks <- asks[seq_len(n), , drop = FALSE]
+    bids <- bids[seq_len(n), , drop = FALSE]
+    data.frame(
+      market         = market,
+      timestamp      = as.POSIXct(Sys.time(), tz = "Asia/Seoul"),
+      ask_price      = as.numeric(asks[, 1]),
+      bid_price      = as.numeric(bids[, 1]),
+      ask_size       = as.numeric(asks[, 2]),
+      bid_size       = as.numeric(bids[, 2]),
+      total_ask_size = sum(as.numeric(parsed$ask[, 2])),
+      total_bid_size = sum(as.numeric(parsed$bid[, 2])),
+      level          = as.integer(level),
+      stringsAsFactors = FALSE
+    ) %>% arrange(ask_price)
+  }, error = function(e) { message("고팍스 오류 (", market, "): ", e$message); NULL })
+}
+
+
 #' Fetch a date-range of OHLCV candles from GOPAX
 #'
 #' @description

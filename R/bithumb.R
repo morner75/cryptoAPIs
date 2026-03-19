@@ -163,6 +163,75 @@ fetch_bithumb_range <- function(market, from, to, unit = "min") {
 }
 
 
+#' Get real-time orderbook (호가) data from Bithumb
+#'
+#' @description
+#' Retrieves the current orderbook for a given market from the Bithumb public
+#' quotation API. Returns one row per price level, sorted by ask price ascending.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param count Integer. Number of price levels to retrieve (default `30`, max `30`).
+#' @param level Integer. Price aggregation unit; only meaningful for KRW markets
+#'   (default `0`, no aggregation).
+#'
+#' @return A [data.frame] with columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`, e.g. `"BTC-KRW"`)}
+#'     \item{timestamp}{POSIXct timestamp in KST}
+#'     \item{ask_price}{Ask price at this level}
+#'     \item{bid_price}{Bid price at this level}
+#'     \item{ask_size}{Ask volume at this level}
+#'     \item{bid_size}{Bid volume at this level}
+#'     \item{total_ask_size}{Total ask volume across all levels}
+#'     \item{total_bid_size}{Total bid volume across all levels}
+#'     \item{level}{Applied price aggregation tier}
+#'   }
+#'   Returns `NULL` on error or when the market is not found.
+#'
+#' @examples
+#' \dontrun{
+#' get_bithumb_orderbook("BTC-KRW")
+#' get_bithumb_orderbook("BTC-KRW", count = 5)
+#' get_bithumb_orderbook("ETH-KRW", level = 1000)
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% arrange
+#' @export
+get_bithumb_orderbook <- function(market, count = 30, level = 0) {
+  sym <- bithumb_trading_pairs(market)
+  if (is.null(sym)) { message("빗썸: symbol 조회 실패 (", market, ")"); return(NULL) }
+  url <- paste0(
+    "https://api.bithumb.com/v1/orderbook",
+    "?markets=", sym, "&count=", count, "&level=", level
+  )
+  tryCatch({
+    res <- GET(url,
+               add_headers(accept = "application/json", `User-Agent` = "Mozilla/5.0"),
+               timeout(10))
+    if (status_code(res) != 200) return(NULL)
+    raw   <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+    ob    <- raw[1, ]
+    units <- ob$orderbook_units[[1]]
+    n     <- min(nrow(units), count)
+    units <- units[seq_len(n), ]
+    data.frame(
+      market         = market,
+      timestamp      = as.POSIXct(ob$timestamp / 1000, origin = "1970-01-01", tz = "Asia/Seoul"),
+      ask_price      = as.numeric(units$ask_price),
+      bid_price      = as.numeric(units$bid_price),
+      ask_size       = as.numeric(units$ask_size),
+      bid_size       = as.numeric(units$bid_size),
+      total_ask_size = as.numeric(ob$total_ask_size),
+      total_bid_size = as.numeric(ob$total_bid_size),
+      level          = as.integer(level),
+      stringsAsFactors = FALSE
+    ) %>% arrange(ask_price)
+  }, error = function(e) { message("빗썸 오류: ", e$message); NULL })
+}
+
+
 #' Retrieve Bithumb market risk alarm data
 #'
 #' @description

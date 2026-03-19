@@ -104,6 +104,80 @@ fetch_coinone <- function(market, count = 200) {
 }
 
 
+#' Get real-time orderbook (호가) data from Coinone
+#'
+#' @description
+#' Retrieves the current orderbook for a given market from the Coinone public
+#' API. Returns one row per price level (ask/bid paired), sorted by ask price
+#' ascending.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param count Integer. Number of price levels to retrieve (default `30`).
+#'
+#' @return A [data.frame] with columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`, e.g. `"BTC-KRW"`)}
+#'     \item{timestamp}{POSIXct timestamp in KST}
+#'     \item{ask_price}{Ask price at this level}
+#'     \item{bid_price}{Bid price at this level}
+#'     \item{ask_size}{Ask volume at this level}
+#'     \item{bid_size}{Bid volume at this level}
+#'     \item{total_ask_size}{Total ask volume across all levels}
+#'     \item{total_bid_size}{Total bid volume across all levels}
+#'     \item{level}{Price aggregation tier (always `0`)}
+#'   }
+#'   Returns `NULL` on error or when the market is not found.
+#'
+#' @examples
+#' \dontrun{
+#' get_coinone_orderbook("BTC-KRW")
+#' get_coinone_orderbook("ETH-KRW", count = 5)
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% arrange
+#' @importFrom stringr str_extract
+#' @export
+get_coinone_orderbook <- function(market, count = 30) {
+  quote_cur <- str_extract(market, "[^-]+$")
+  sym <- coinone_trading_pairs(market, quote = quote_cur)
+  if (is.null(sym)) { message("코인원: symbol 조회 실패 (", market, ")"); return(NULL) }
+  url <- paste0(
+    "https://api.coinone.co.kr/public/v2/orderbook/", quote_cur, "/", sym
+  )
+  tryCatch({
+    res <- GET(url,
+               add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+               timeout(10))
+    if (status_code(res) != 200) return(NULL)
+    parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+    if (is.null(parsed$result) || parsed$result != "success") {
+      message("코인원 API 오류: ", parsed$error_code, " / ", market)
+      return(NULL)
+    }
+    asks <- parsed$asks
+    bids <- parsed$bids
+    n    <- min(nrow(asks), nrow(bids), count)
+    asks <- asks[seq_len(n), ]
+    bids <- bids[seq_len(n), ]
+    data.frame(
+      market         = market,
+      timestamp      = as.POSIXct(as.numeric(parsed$timestamp) / 1000,
+                                  origin = "1970-01-01", tz = "Asia/Seoul"),
+      ask_price      = as.numeric(asks$price),
+      bid_price      = as.numeric(bids$price),
+      ask_size       = as.numeric(asks$qty),
+      bid_size       = as.numeric(bids$qty),
+      total_ask_size = sum(as.numeric(parsed$asks$qty)),
+      total_bid_size = sum(as.numeric(parsed$bids$qty)),
+      level          = 0L,
+      stringsAsFactors = FALSE
+    ) %>% arrange(ask_price)
+  }, error = function(e) { message("코인원 오류: ", e$message); NULL })
+}
+
+
 #' Fetch a date-range of OHLCV candles from Coinone
 #'
 #' @description
