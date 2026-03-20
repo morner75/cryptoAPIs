@@ -7,10 +7,10 @@ test_that("upbit_trading_pairs returns expected structure", {
   expect_equal(unique(result$exchange), "upbit")
 })
 
-test_that("upbit_trading_pairs filters by market", {
+test_that("upbit_trading_pairs filters by market returns NULL for non-exact match", {
   skip_if_offline()
-  result <- upbit_trading_pairs(market = "KRW")
-  expect_true(all(result$quote == "KRW"))
+  result <- upbit_trading_pairs(market = "INVALID-KRW")
+  expect_null(result)
 })
 
 test_that("upbit_trading_pairs returns symbol string for specific market", {

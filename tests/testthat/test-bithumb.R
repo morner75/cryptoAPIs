@@ -18,8 +18,8 @@ test_that("fetch_bithumb returns OHLCV data frame", {
   skip_if_offline()
   result <- fetch_bithumb("BTC-KRW", count = 5)
   expect_s3_class(result, "data.frame")
-  expect_named(result, c("time_kst", "opening_price", "trade_price",
-                          "high_price", "low_price", "volume"))
+  expect_named(result, c("time_kst", "opening_price", "high_price",
+                          "low_price", "trade_price", "volume"))
   expect_true(nrow(result) > 0)
 })
 

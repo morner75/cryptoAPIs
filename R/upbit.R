@@ -191,14 +191,15 @@ fetch_upbit_range <- function(market, from, to, unit = "min") {
 #'     \item{ask_bid}{Trade direction: `"ASK"` (sell) or `"BID"` (buy)}
 #'     \item{sequential_id}{Unique trade identifier (used for deduplication)}
 #'   }
-#'   Sorted by `time_kst` ascending. Returns `NULL` on error.
+#'   Sorted by `time_kst` ascending, with duplicates removed by `sequential_id`.
+#'   Returns `NULL` on error.
 #'
 #' @examples
 #' \dontrun{
 #' get_upbit_trades(
 #'   "BTC-KRW",
 #'   from = as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul"),
-#'   to   = as.POSIXct("2024-01-01 09:05:00", tz = "Asia/Seoul")
+#'   to   = as.POSIXct("2024-01-01 10:00:00", tz = "Asia/Seoul")
 #' )
 #' }
 #'
@@ -214,7 +215,7 @@ get_upbit_trades <- function(market, from, to) {
   tryCatch({
     repeat {
       if (is.null(cursor)) {
-        to_str <- format(to, "%H:%M:%S", tz = "Asia/Seoul")
+        to_str <- format(to, "%H:%M:%S", tz = "UTC")
         url <- paste0("https://api.upbit.com/v1/trades/ticks",
                       "?market=", sym, "&count=500&to=", to_str)
       } else {

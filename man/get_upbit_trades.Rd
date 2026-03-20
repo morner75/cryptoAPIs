@@ -22,7 +22,8 @@ A [data.frame] with columns:
     \item{ask_bid}{Trade direction: `"ASK"` (sell) or `"BID"` (buy)}
     \item{sequential_id}{Unique trade identifier (used for deduplication)}
   }
-  Sorted by `time_kst` ascending. Returns `NULL` on error.
+  Sorted by `time_kst` ascending, with duplicates removed by `sequential_id`.
+  Returns `NULL` on error.
 }
 \description{
 Paginates through the Upbit trade ticks endpoint to retrieve all individual
@@ -34,7 +35,7 @@ subsequent pages use the `sequential_id` cursor returned by each response.
 get_upbit_trades(
   "BTC-KRW",
   from = as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul"),
-  to   = as.POSIXct("2024-01-01 09:05:00", tz = "Asia/Seoul")
+  to   = as.POSIXct("2024-01-01 10:00:00", tz = "Asia/Seoul")
 )
 }
 
