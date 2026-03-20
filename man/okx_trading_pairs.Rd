@@ -16,7 +16,9 @@ returns the matching exchange-native `instId`.}
 }
 \value{
 A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-  `symbol`, `market`, or `NULL` on error.
+  `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+  returns the matching exchange-native `instId` string (or `NULL` if not
+  found).
 }
 \description{
 Fetches all live instruments of the specified type from the OKX exchange API.

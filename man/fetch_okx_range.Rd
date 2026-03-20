@@ -17,8 +17,10 @@ fetch_okx_range(market, from, to, unit = "min")
 `"day"` (`1D`). Defaults to `"min"`.}
 }
 \value{
-A [data.frame] sorted by `time_kst` with duplicates removed, or
-  `NULL` on error.
+A [data.frame] with columns `time_kst`, `opening_price`,
+  `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+  with duplicates removed. Returns `NULL` on error or when no data is
+  available.
 }
 \description{
 Paginates through the OKX history-candles endpoint to retrieve all bars
@@ -28,8 +30,8 @@ between `from` and `to`.
 \dontrun{
 fetch_okx_range(
   "BTC-USDT",
-  from = as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
-  to   = as.POSIXct("2024-01-01 01:00:00", tz = "UTC")
+  from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+  to   = as.POSIXct("2024-01-01 01:00:00", tz = "Asia/Seoul")
 )
 }
 

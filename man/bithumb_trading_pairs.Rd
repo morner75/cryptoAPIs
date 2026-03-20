@@ -13,7 +13,9 @@ returns the matching exchange-native symbol.}
 }
 \value{
 A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-  `symbol`, `market`, or `NULL` on error.
+  `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+  returns the matching exchange-native symbol string (or `NULL` if not
+  found).
 }
 \description{
 Fetches all available trading pairs from the Bithumb exchange API.

@@ -1,3 +1,5 @@
+.binance_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from Binance
 #'
 #' @description
@@ -21,24 +23,28 @@
 #' @importFrom dplyr %>% filter transmute
 #' @export
 binance_trading_pairs <- function(market = NULL) {
-  tryCatch({
-    res <- GET("https://api.binance.com/api/v3/exchangeInfo",
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("바이낸스 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
-      `[[`("symbols") %>%
-      filter(status == "TRADING") %>%
-      transmute(
-        exchange = "binance",
-        asset    = baseAsset,
-        quote    = quoteAsset,
-        symbol   = symbol,
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "바이낸스")
-  }, error = function(e) { message("바이낸스 오류: ", e$message); NULL })
+  if (!exists("pairs", envir = .binance_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://api.binance.com/api/v3/exchangeInfo",
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("바이낸스 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
+        `[[`("symbols") %>%
+        filter(status == "TRADING") %>%
+        transmute(
+          exchange = "binance",
+          asset    = baseAsset,
+          quote    = quoteAsset,
+          symbol   = symbol,
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign("pairs", df, envir = .binance_pairs_cache)
+    }, error = function(e) { message("바이낸스 오류: ", e$message); return(NULL) })
+  }
+  if (!exists("pairs", envir = .binance_pairs_cache)) return(NULL)
+  .pick_symbol(.binance_pairs_cache$pairs, market, "바이낸스")
 }
 
 
@@ -108,15 +114,17 @@ fetch_binance <- function(market, count = 200) {
 #' @param unit Character. Candle unit: `"min"`, `"hour"`, or `"day"`.
 #'   Defaults to `"min"`.
 #'
-#' @return A [data.frame] sorted by `time_kst` with duplicates removed, or
-#'   `NULL` on error.
+#' @return A [data.frame] with columns `time_kst`, `opening_price`,
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{
 #' fetch_binance_range(
 #'   "BTC-USDT",
-#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
-#'   to   = as.POSIXct("2024-01-01 01:00:00", tz = "UTC")
+#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 01:00:00", tz = "Asia/Seoul")
 #' )
 #' }
 #'
@@ -166,4 +174,78 @@ fetch_binance_range <- function(market, from, to, unit = "min") {
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
   }, error = function(e) { message("바이낸스 범위 오류: ", e$message); NULL })
+}
+
+
+#' Fetch trade tick data from Binance over a date range
+#'
+#' @description
+#' Paginates through the Binance aggregate trades endpoint (`/api/v3/aggTrades`)
+#' to retrieve all trades between `from` and `to`. Uses `fromId`-based
+#' pagination after the first page.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-USDT"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
+#'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_binance_trades(
+#'   "BTC-USDT",
+#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 00:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows filter distinct arrange
+#' @export
+get_binance_trades <- function(market, from, to) {
+  sym <- binance_trading_pairs(market)
+  if (is.null(sym)) { message("바이낸스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  from_ms  <- round(as.numeric(from) * 1000)
+  to_ms    <- round(as.numeric(to)   * 1000)
+  all_rows <- list()
+  from_id  <- NULL
+  tryCatch({
+    repeat {
+      if (is.null(from_id)) {
+        url <- paste0("https://api.binance.com/api/v3/aggTrades",
+                      "?symbol=", sym,
+                      "&startTime=", from_ms, "&endTime=", to_ms, "&limit=1000")
+      } else {
+        url <- paste0("https://api.binance.com/api/v3/aggTrades",
+                      "?symbol=", sym,
+                      "&fromId=", from_id, "&endTime=", to_ms, "&limit=1000")
+      }
+      res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(15))
+      if (status_code(res) != 200) break
+      raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
+      df <- data.frame(
+        time_kst      = as.POSIXct(as.numeric(raw$T) / 1000,
+                                   origin = "1970-01-01", tz = "Asia/Seoul"),
+        trade_price   = as.numeric(raw$p),
+        volume        = as.numeric(raw$q),
+        ask_bid       = ifelse(raw$m, "ASK", "BID"),
+        sequential_id = as.numeric(raw$a),
+        stringsAsFactors = FALSE
+      )
+      all_rows <- c(all_rows, list(df))
+      if (nrow(df) < 1000) break
+      from_id <- max(df$sequential_id) + 1
+      Sys.sleep(0.1)
+    }
+    if (length(all_rows) == 0) return(NULL)
+    bind_rows(all_rows) %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("바이낸스 체결 오류: ", e$message); NULL })
 }

@@ -9,7 +9,7 @@ fetch_gopax(market, count = 200)
 \arguments{
 \item{market}{Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).}
 
-\item{count}{Integer. Approximate number of candles (default `200`).}
+\item{count}{Integer. Number of candles to retrieve (default `200`).}
 }
 \value{
 A [data.frame] with columns `time_kst`, `opening_price`,

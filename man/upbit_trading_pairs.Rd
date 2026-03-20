@@ -7,20 +7,15 @@
 upbit_trading_pairs(market = NULL)
 }
 \arguments{
-\item{market}{Character. Optional market filter (e.g., `"KRW"`, `"BTC"`).
-If `NULL` (default), all markets are returned.}
+\item{market}{Character. Optional filter. If `NULL` (default), returns all
+pairs as a tibble. If a market string (e.g., `"BTC-KRW"`) is supplied,
+returns the matching exchange-native symbol.}
 }
 \value{
-A [tibble::tibble()] with columns:
-  \describe{
-    \item{exchange}{Exchange name (`"upbit"`)}
-    \item{asset}{Base asset symbol (e.g., `"BTC"`)}
-    \item{quote}{Quote currency (e.g., `"KRW"`)}
-    \item{symbol}{Exchange-native symbol format (`"KRW-BTC"`)}
-    \item{market}{Standardized market format (`"BTC-KRW"`)}
-  }
-  When `market` is non-`NULL`, returns the matching exchange-native symbol
-  string (or `NULL` if not found).
+A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
+  `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+  returns the matching exchange-native symbol string (e.g., `"KRW-BTC"`) or
+  `NULL` if not found.
 }
 \description{
 Fetches all available trading pairs from the Upbit exchange API.
@@ -28,7 +23,7 @@ Fetches all available trading pairs from the Upbit exchange API.
 \examples{
 \dontrun{
 upbit_trading_pairs()
-upbit_trading_pairs(market = "KRW")
+upbit_trading_pairs(market = "BTC-KRW")
 }
 
 }

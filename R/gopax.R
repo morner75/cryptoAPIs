@@ -1,3 +1,5 @@
+.gopax_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from GOPAX
 #'
 #' @description
@@ -8,7 +10,9 @@
 #'   returns the matching exchange-native symbol.
 #'
 #' @return A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-#'   `symbol`, `market`, or `NULL` on error.
+#'   `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+#'   returns the matching exchange-native symbol string (or `NULL` if not
+#'   found).
 #'
 #' @examples
 #' \dontrun{
@@ -22,22 +26,26 @@
 #' @importFrom stringr str_c
 #' @export
 gopax_trading_pairs <- function(market = NULL) {
-  tryCatch({
-    res <- GET("https://api.gopax.co.kr/trading-pairs",
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("고팍스 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
-      transmute(
-        exchange = "gopax",
-        asset    = baseAsset,
-        quote    = quoteAsset,
-        symbol   = str_c(baseAsset, quoteAsset, sep = "-"),
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "고팍스")
-  }, error = function(e) { message("고팍스 오류: ", e$message); NULL })
+  if (!exists("pairs", envir = .gopax_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://api.gopax.co.kr/trading-pairs",
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("고팍스 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
+        transmute(
+          exchange = "gopax",
+          asset    = baseAsset,
+          quote    = quoteAsset,
+          symbol   = str_c(baseAsset, quoteAsset, sep = "-"),
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign("pairs", df, envir = .gopax_pairs_cache)
+    }, error = function(e) { message("고팍스 오류: ", e$message); return(NULL) })
+  }
+  if (!exists("pairs", envir = .gopax_pairs_cache)) return(NULL)
+  .pick_symbol(.gopax_pairs_cache$pairs, market, "고팍스")
 }
 
 
@@ -48,7 +56,7 @@ gopax_trading_pairs <- function(market = NULL) {
 #' the GOPAX exchange.
 #'
 #' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
-#' @param count Integer. Approximate number of candles (default `200`).
+#' @param count Integer. Number of candles to retrieve (default `200`).
 #'
 #' @return A [data.frame] with columns `time_kst`, `opening_price`,
 #'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`.
@@ -98,6 +106,76 @@ fetch_gopax <- function(market, count = 200) {
 }
 
 
+#' Fetch trade tick data from GOPAX over a date range
+#'
+#' @description
+#' Paginates through the GOPAX trades endpoint to retrieve all individual
+#' trades between `from` and `to`. Uses cursor-based pagination via trade `id`
+#' (`pastmax` parameter).
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
+#'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_gopax_trades(
+#'   "BTC-KRW",
+#'   from = as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 09:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows filter distinct arrange
+#' @export
+get_gopax_trades <- function(market, from, to) {
+  sym <- gopax_trading_pairs(market)
+  if (is.null(sym)) { message("고팍스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  all_rows <- list()
+  pastmax  <- NULL
+  before_s <- round(as.numeric(to))
+  tryCatch({
+    repeat {
+      url <- paste0("https://api.gopax.co.kr/trading-pairs/", sym, "/trades",
+                    "?limit=100",
+                    if (!is.null(pastmax)) paste0("&pastmax=", pastmax)
+                    else paste0("&before=", before_s))
+      res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(15))
+      if (status_code(res) != 200) break
+      raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
+      df <- data.frame(
+        time_kst      = as.POSIXct(raw$time, format = "%Y-%m-%dT%H:%M:%OSZ",
+                                   tz = "UTC"),
+        trade_price   = as.numeric(raw$price),
+        volume        = as.numeric(raw$amount),
+        ask_bid       = ifelse(raw$side == "buy", "BID", "ASK"),
+        sequential_id = as.numeric(raw$id),
+        stringsAsFactors = FALSE
+      )
+      attr(df$time_kst, "tzone") <- "Asia/Seoul"
+      all_rows <- c(all_rows, list(df))
+      oldest <- min(df$time_kst)
+      if (oldest <= from || nrow(df) < 100) break
+      pastmax <- min(df$sequential_id)
+      Sys.sleep(0.1)
+    }
+    if (length(all_rows) == 0) return(NULL)
+    bind_rows(all_rows) %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("고팍스 체결 오류: ", e$message); NULL })
+}
+
+
 #' Get real-time orderbook (호가) data from GOPAX
 #'
 #' @description
@@ -107,8 +185,8 @@ fetch_gopax <- function(market, count = 200) {
 #'
 #' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
 #' @param count Integer. Number of price levels to retrieve (default `30`).
-#' @param level Integer. Price aggregation unit (default `0`, no aggregation).
-#'   Passed to the API as-is for KRW markets.
+#' @param level Integer. Stored in the `level` output column (default `0`).
+#'   GOPAX does not support price-level aggregation via the public API.
 #'
 #' @return A [data.frame] with columns:
 #'   \describe{
@@ -181,8 +259,10 @@ get_gopax_orderbook <- function(market, count = 30, level = 0) {
 #' @param unit Character. Candle unit: `"min"` (1-minute), `"hour"` (30-minute
 #'   approximation), or `"day"`. Defaults to `"min"`.
 #'
-#' @return A [data.frame] sorted by `time_kst` with duplicates removed, or
-#'   `NULL` on error.
+#' @return A [data.frame] with columns `time_kst`, `opening_price`,
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{

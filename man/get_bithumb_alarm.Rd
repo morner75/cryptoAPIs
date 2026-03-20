@@ -15,7 +15,7 @@ If `NULL` (default), all markets are returned.}
 \value{
 A [tibble::tibble()] with columns `market` (`"ASSET-QUOTE"`),
   `symbol` (Bithumb native), `alarm` (`"주의"` / `"경고"` / `"위험"`),
-  and `reason` (pipe-delimited when multiple types apply).
+  and `reason` (`" / "`-delimited when multiple warning types apply).
 }
 \description{
 Queries the Bithumb virtual asset warning API and returns markets with

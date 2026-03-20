@@ -1,3 +1,5 @@
+.okx_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from OKX
 #'
 #' @description
@@ -10,7 +12,9 @@
 #'   `"FUTURES"`, `"SWAP"`, `"OPTION"`. Defaults to `"SPOT"`.
 #'
 #' @return A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-#'   `symbol`, `market`, or `NULL` on error.
+#'   `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+#'   returns the matching exchange-native `instId` string (or `NULL` if not
+#'   found).
 #'
 #' @examples
 #' \dontrun{
@@ -22,29 +26,34 @@
 #' @importFrom jsonlite fromJSON
 #' @importFrom dplyr %>% filter transmute
 #' @export
+
 okx_trading_pairs <- function(market = NULL, inst_type = "SPOT") {
-  tryCatch({
-    res <- GET("https://www.okx.com/api/v5/public/instruments",
-               query  = list(instType = inst_type),
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("OKX 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"))
-    if (parsed$code != "0") {
-      message("OKX 오류: ", parsed$msg); return(NULL)
-    }
-    df <- parsed$data %>%
-      filter(state == "live") %>%
-      transmute(
-        exchange = "okx",
-        asset    = baseCcy,
-        quote    = quoteCcy,
-        symbol   = instId,
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "OKX")
-  }, error = function(e) { message("OKX 오류: ", e$message); NULL })
+  if (!exists(inst_type, envir = .okx_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://www.okx.com/api/v5/public/instruments",
+                 query  = list(instType = inst_type),
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("OKX 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"))
+      if (parsed$code != "0") {
+        message("OKX 오류: ", parsed$msg); return(NULL)
+      }
+      df <- parsed$data %>%
+        filter(state == "live") %>%
+        transmute(
+          exchange = "okx",
+          asset    = baseCcy,
+          quote    = quoteCcy,
+          symbol   = instId,
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign(inst_type, df, envir = .okx_pairs_cache)
+    }, error = function(e) { message("OKX 오류: ", e$message); return(NULL) })
+  }
+  if (!exists(inst_type, envir = .okx_pairs_cache)) return(NULL)
+  .pick_symbol(get(inst_type, envir = .okx_pairs_cache), market, "OKX")
 }
 
 
@@ -110,15 +119,17 @@ fetch_okx <- function(market, count = 100) {
 #' @param unit Character. Candle unit: `"min"` (`1m`), `"hour"` (`1H`), or
 #'   `"day"` (`1D`). Defaults to `"min"`.
 #'
-#' @return A [data.frame] sorted by `time_kst` with duplicates removed, or
-#'   `NULL` on error.
+#' @return A [data.frame] with columns `time_kst`, `opening_price`,
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{
 #' fetch_okx_range(
 #'   "BTC-USDT",
-#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
-#'   to   = as.POSIXct("2024-01-01 01:00:00", tz = "UTC")
+#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 01:00:00", tz = "Asia/Seoul")
 #' )
 #' }
 #'
@@ -168,4 +179,73 @@ fetch_okx_range <- function(market, from, to, unit = "min") {
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
   }, error = function(e) { message("OKX 범위 오류: ", e$message); NULL })
+}
+
+
+#' Fetch trade tick data from OKX over a date range
+#'
+#' @description
+#' Paginates through the OKX historical trades endpoint
+#' (`/api/v5/market/history-trades`) to retrieve all trades between `from`
+#' and `to`. Uses `after` (tradeId) cursor-based pagination.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-USDT"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
+#'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_okx_trades(
+#'   "BTC-USDT",
+#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 00:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows filter distinct arrange
+#' @export
+get_okx_trades <- function(market, from, to) {
+  sym <- okx_trading_pairs(market)
+  if (is.null(sym)) { message("OKX: symbol 조회 실패 (", market, ")"); return(NULL) }
+  all_rows <- list()
+  after    <- NULL
+  tryCatch({
+    repeat {
+      url <- paste0("https://www.okx.com/api/v5/market/history-trades",
+                    "?instId=", sym, "&limit=100",
+                    if (!is.null(after)) paste0("&after=", after) else "")
+      res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(15))
+      if (status_code(res) != 200) break
+      parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(parsed$code) || parsed$code != "0") break
+      raw <- parsed$data
+      if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
+      df <- data.frame(
+        time_kst      = as.POSIXct(as.numeric(raw$ts) / 1000,
+                                   origin = "1970-01-01", tz = "Asia/Seoul"),
+        trade_price   = as.numeric(raw$px),
+        volume        = as.numeric(raw$sz),
+        ask_bid       = ifelse(raw$side == "buy", "BID", "ASK"),
+        sequential_id = as.numeric(raw$tradeId),
+        stringsAsFactors = FALSE
+      )
+      all_rows <- c(all_rows, list(df))
+      oldest <- min(df$time_kst)
+      if (oldest <= from || nrow(df) < 100) break
+      after <- min(df$sequential_id)
+      Sys.sleep(0.1)
+    }
+    if (length(all_rows) == 0) return(NULL)
+    bind_rows(all_rows) %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("OKX 체결 오류: ", e$message); NULL })
 }

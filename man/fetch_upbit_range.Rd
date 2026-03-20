@@ -18,8 +18,9 @@ or `"day"`. Defaults to `"min"`.}
 }
 \value{
 A [data.frame] with columns `time_kst`, `opening_price`,
-  `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`.
-  Returns `NULL` on error or when no data is available.
+  `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+  with duplicates removed. Returns `NULL` on error or when no data is
+  available.
 }
 \description{
 Paginates through the Upbit candles endpoint to retrieve all 1-minute (or

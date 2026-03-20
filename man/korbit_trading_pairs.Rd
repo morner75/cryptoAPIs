@@ -13,7 +13,9 @@ returns the matching exchange-native symbol.}
 }
 \value{
 A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-  `symbol`, `market`, or `NULL` on error.
+  `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+  returns the matching exchange-native symbol string (e.g., `"btc_krw"`) or
+  `NULL` if not found.
 }
 \description{
 Fetches all available (launched) trading pairs from the Korbit exchange API.

@@ -1,3 +1,5 @@
+.bithumb_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from Bithumb
 #'
 #' @description
@@ -8,7 +10,9 @@
 #'   returns the matching exchange-native symbol.
 #'
 #' @return A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-#'   `symbol`, `market`, or `NULL` on error.
+#'   `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+#'   returns the matching exchange-native symbol string (or `NULL` if not
+#'   found).
 #'
 #' @examples
 #' \dontrun{
@@ -22,24 +26,28 @@
 #' @importFrom stringr str_extract
 #' @export
 bithumb_trading_pairs <- function(market = NULL) {
-  tryCatch({
-    res <- GET("https://api.bithumb.com/v1/market/all",
-               query   = list(isDetails = "false"),
-               content_type("application/octet-stream"),
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("빗썸 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
-      transmute(
-        exchange = "bithumb",
-        asset    = str_extract(market, "(?<=\\-)\\w+$"),
-        quote    = str_extract(market, "^\\w+(?=\\-)"),
-        symbol   = market,
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "빗썸")
-  }, error = function(e) { message("빗썸 오류: ", e$message); NULL })
+  if (!exists("pairs", envir = .bithumb_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://api.bithumb.com/v1/market/all",
+                 query   = list(isDetails = "false"),
+                 content_type("application/octet-stream"),
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("빗썸 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
+        transmute(
+          exchange = "bithumb",
+          asset    = str_extract(market, "(?<=\\-)\\w+$"),
+          quote    = str_extract(market, "^\\w+(?=\\-)"),
+          symbol   = market,
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign("pairs", df, envir = .bithumb_pairs_cache)
+    }, error = function(e) { message("빗썸 오류: ", e$message); return(NULL) })
+  }
+  if (!exists("pairs", envir = .bithumb_pairs_cache)) return(NULL)
+  .pick_symbol(.bithumb_pairs_cache$pairs, market, "빗썸")
 }
 
 
@@ -84,8 +92,8 @@ fetch_bithumb <- function(market, count = 200) {
     parsed %>%
       transmute(
         time_kst      = as_datetime(candle_date_time_kst, tz = "Asia/Seoul"),
-        opening_price, trade_price,
-        high_price, low_price,
+        opening_price,
+        high_price, low_price, trade_price,
         volume = candle_acc_trade_volume
       ) %>% arrange(time_kst)
   }, error = function(e) { message("빗썸 오류: ", e$message); NULL })
@@ -104,8 +112,10 @@ fetch_bithumb <- function(market, count = 200) {
 #' @param unit Character. Candle unit: `"min"`, `"hour"`, or `"day"`.
 #'   Defaults to `"min"`.
 #'
-#' @return A [data.frame] sorted by `time_kst` with duplicates removed, or
-#'   `NULL` on error.
+#' @return A [data.frame] with columns `time_kst`, `opening_price`,
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{
@@ -160,6 +170,78 @@ fetch_bithumb_range <- function(market, from, to, unit = "min") {
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
   }, error = function(e) { message("빗썸 범위 오류: ", e$message); NULL })
+}
+
+
+#' Fetch trade tick data from Bithumb over a date range
+#'
+#' @description
+#' Paginates through the Bithumb trade ticks endpoint to retrieve all individual
+#' trades between `from` and `to`. Uses cursor-based pagination via
+#' `sequential_id`.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
+#'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_bithumb_trades(
+#'   "BTC-KRW",
+#'   from = as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 09:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows filter distinct arrange
+#' @export
+get_bithumb_trades <- function(market, from, to) {
+  sym <- bithumb_trading_pairs(market)
+  if (is.null(sym)) { message("빗썸: symbol 조회 실패 (", market, ")"); return(NULL) }
+  all_rows <- list()
+  cursor   <- NULL
+  tryCatch({
+    repeat {
+      if (is.null(cursor)) {
+        to_str <- URLencode(format(to, "%Y-%m-%d %H:%M:%S", tz = "Asia/Seoul"))
+        url <- paste0("https://api.bithumb.com/v1/trades/ticks",
+                      "?market=", sym, "&count=500&to=", to_str)
+      } else {
+        url <- paste0("https://api.bithumb.com/v1/trades/ticks",
+                      "?market=", sym, "&count=500&cursor=", cursor)
+      }
+      res <- GET(url, add_headers(accept = "application/json", `User-Agent` = "Mozilla/5.0"),
+                 timeout(15))
+      if (status_code(res) != 200) break
+      raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
+      df <- data.frame(
+        time_kst      = as.POSIXct(raw$timestamp / 1000,
+                                   origin = "1970-01-01", tz = "Asia/Seoul"),
+        trade_price   = as.numeric(raw$trade_price),
+        volume        = as.numeric(raw$trade_volume),
+        ask_bid       = raw$ask_bid,
+        sequential_id = as.numeric(raw$sequential_id),
+        stringsAsFactors = FALSE
+      )
+      all_rows <- c(all_rows, list(df))
+      oldest <- min(df$time_kst)
+      if (oldest <= from || nrow(df) < 500) break
+      cursor <- min(df$sequential_id)
+      Sys.sleep(0.15)
+    }
+    if (length(all_rows) == 0) return(NULL)
+    bind_rows(all_rows) %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("빗썸 체결 오류: ", e$message); NULL })
 }
 
 
@@ -245,7 +327,7 @@ get_bithumb_orderbook <- function(market, count = 30, level = 0) {
 #'
 #' @return A [tibble::tibble()] with columns `market` (`"ASSET-QUOTE"`),
 #'   `symbol` (Bithumb native), `alarm` (`"주의"` / `"경고"` / `"위험"`),
-#'   and `reason` (pipe-delimited when multiple types apply).
+#'   and `reason` (`" / "`-delimited when multiple warning types apply).
 #'
 #' @examples
 #' \dontrun{
@@ -255,7 +337,7 @@ get_bithumb_orderbook <- function(market, count = 30, level = 0) {
 #' @importFrom httr2 request req_user_agent req_retry req_perform resp_body_string
 #' @importFrom jsonlite fromJSON
 #' @importFrom tibble as_tibble tibble
-#' @importFrom dplyr %>% mutate filter group_by summarise select arrange
+#' @importFrom dplyr %>% mutate filter group_by summarise select arrange desc
 #' @importFrom stringr str_starts str_extract
 #' @export
 get_bithumb_alarm <- function(quote = NULL, verbose = FALSE) {

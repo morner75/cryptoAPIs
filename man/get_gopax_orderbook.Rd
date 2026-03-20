@@ -11,8 +11,8 @@ get_gopax_orderbook(market, count = 30, level = 0)
 
 \item{count}{Integer. Number of price levels to retrieve (default `30`).}
 
-\item{level}{Integer. Price aggregation unit (default `0`, no aggregation).
-Passed to the API as-is for KRW markets.}
+\item{level}{Integer. Stored in the `level` output column (default `0`).
+GOPAX does not support price-level aggregation via the public API.}
 }
 \value{
 A [data.frame] with columns:

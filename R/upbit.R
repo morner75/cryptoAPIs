@@ -1,26 +1,23 @@
+.upbit_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from Upbit
 #'
 #' @description
 #' Fetches all available trading pairs from the Upbit exchange API.
 #'
-#' @param market Character. Optional market filter (e.g., `"KRW"`, `"BTC"`).
-#'   If `NULL` (default), all markets are returned.
+#' @param market Character. Optional filter. If `NULL` (default), returns all
+#'   pairs as a tibble. If a market string (e.g., `"BTC-KRW"`) is supplied,
+#'   returns the matching exchange-native symbol.
 #'
-#' @return A [tibble::tibble()] with columns:
-#'   \describe{
-#'     \item{exchange}{Exchange name (`"upbit"`)}
-#'     \item{asset}{Base asset symbol (e.g., `"BTC"`)}
-#'     \item{quote}{Quote currency (e.g., `"KRW"`)}
-#'     \item{symbol}{Exchange-native symbol format (`"KRW-BTC"`)}
-#'     \item{market}{Standardized market format (`"BTC-KRW"`)}
-#'   }
-#'   When `market` is non-`NULL`, returns the matching exchange-native symbol
-#'   string (or `NULL` if not found).
+#' @return A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
+#'   `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+#'   returns the matching exchange-native symbol string (e.g., `"KRW-BTC"`) or
+#'   `NULL` if not found.
 #'
 #' @examples
 #' \dontrun{
 #' upbit_trading_pairs()
-#' upbit_trading_pairs(market = "KRW")
+#' upbit_trading_pairs(market = "BTC-KRW")
 #' }
 #'
 #' @importFrom httr GET content status_code accept
@@ -29,23 +26,27 @@
 #' @importFrom stringr str_extract
 #' @export
 upbit_trading_pairs <- function(market = NULL) {
-  tryCatch({
-    res <- GET("https://api.upbit.com/v1/market/all",
-               query   = list(is_details = "false"),
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("업비트 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
-      transmute(
-        exchange = "upbit",
-        asset    = str_extract(market, "(?<=\\-)\\w+$"),
-        quote    = str_extract(market, "^\\w+(?=\\-)"),
-        symbol   = market,
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "업비트")
-  }, error = function(e) { message("업비트 오류: ", e$message); NULL })
+  if (!exists("pairs", envir = .upbit_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://api.upbit.com/v1/market/all",
+                 query   = list(is_details = "false"),
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("업비트 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
+        transmute(
+          exchange = "upbit",
+          asset    = str_extract(market, "(?<=\\-)\\w+$"),
+          quote    = str_extract(market, "^\\w+(?=\\-)"),
+          symbol   = market,
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign("pairs", df, envir = .upbit_pairs_cache)
+    }, error = function(e) { message("업비트 오류: ", e$message); return(NULL) })
+  }
+  if (!exists("pairs", envir = .upbit_pairs_cache)) return(NULL)
+  .pick_symbol(.upbit_pairs_cache$pairs, market, "업비트")
 }
 
 
@@ -111,8 +112,9 @@ fetch_upbit <- function(market, count = 60) {
 #'   or `"day"`. Defaults to `"min"`.
 #'
 #' @return A [data.frame] with columns `time_kst`, `opening_price`,
-#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`.
-#'   Returns `NULL` on error or when no data is available.
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{
@@ -170,6 +172,86 @@ fetch_upbit_range <- function(market, from, to, unit = "min") {
 }
 
 
+#' Fetch trade tick data from Upbit over a date range
+#'
+#' @description
+#' Paginates through the Upbit trade ticks endpoint to retrieve all individual
+#' trades between `from` and `to`. The first page uses `to` as the upper bound;
+#' subsequent pages use the `sequential_id` cursor returned by each response.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns:
+#'   \describe{
+#'     \item{time_kst}{POSIXct trade timestamp in KST}
+#'     \item{trade_price}{Executed price}
+#'     \item{volume}{Executed volume (`trade_volume`)}
+#'     \item{ask_bid}{Trade direction: `"ASK"` (sell) or `"BID"` (buy)}
+#'     \item{sequential_id}{Unique trade identifier (used for deduplication)}
+#'   }
+#'   Sorted by `time_kst` ascending. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_upbit_trades(
+#'   "BTC-KRW",
+#'   from = as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 09:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows filter distinct arrange
+#' @export
+get_upbit_trades <- function(market, from, to) {
+  sym <- upbit_trading_pairs(market)
+  if (is.null(sym)) { message("업비트: symbol 조회 실패 (", market, ")"); return(NULL) }
+  all_rows <- list()
+  cursor   <- NULL
+  tryCatch({
+    repeat {
+      if (is.null(cursor)) {
+        to_str <- format(to, "%H:%M:%S", tz = "Asia/Seoul")
+        url <- paste0("https://api.upbit.com/v1/trades/ticks",
+                      "?market=", sym, "&count=500&to=", to_str)
+      } else {
+        url <- paste0("https://api.upbit.com/v1/trades/ticks",
+                      "?market=", sym, "&count=500&cursor=", cursor)
+      }
+      res <- GET(url, add_headers(accept = "application/json", `User-Agent` = "Mozilla/5.0"),
+                 timeout(15))
+      if (status_code(res) != 200) break
+      raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
+
+      df <- data.frame(
+        time_kst      = as.POSIXct(raw$timestamp / 1000,
+                                   origin = "1970-01-01", tz = "Asia/Seoul"),
+        trade_price   = as.numeric(raw$trade_price),
+        volume        = as.numeric(raw$trade_volume),
+        ask_bid       = raw$ask_bid,
+        sequential_id = as.numeric(raw$sequential_id),
+        stringsAsFactors = FALSE
+      )
+      all_rows <- c(all_rows, list(df))
+
+      oldest <- min(df$time_kst)
+      if (oldest <= from || nrow(df) < 500) break
+      cursor <- min(df$sequential_id)
+      Sys.sleep(0.15)
+    }
+    if (length(all_rows) == 0) return(NULL)
+    bind_rows(all_rows) %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("업비트 체결 오류: ", e$message); NULL })
+}
+
+
 #' Get real-time orderbook (호가) data from Upbit
 #'
 #' @description
@@ -219,8 +301,10 @@ get_upbit_orderbook <- function(market, count = 30, level = 0) {
                timeout(10))
     if (status_code(res) != 200) return(NULL)
     raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
-    ob  <- raw[1, ]
+    ob    <- raw[1, ]
     units <- ob$orderbook_units[[1]]
+    n     <- min(nrow(units), count)
+    units <- units[seq_len(n), ]
     data.frame(
       market         = market,
       timestamp      = as.POSIXct(ob$timestamp / 1000, origin = "1970-01-01", tz = "Asia/Seoul"),

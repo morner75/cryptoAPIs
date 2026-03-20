@@ -1,3 +1,5 @@
+.korbit_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from Korbit
 #'
 #' @description
@@ -8,7 +10,9 @@
 #'   returns the matching exchange-native symbol.
 #'
 #' @return A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-#'   `symbol`, `market`, or `NULL` on error.
+#'   `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+#'   returns the matching exchange-native symbol string (e.g., `"btc_krw"`) or
+#'   `NULL` if not found.
 #'
 #' @examples
 #' \dontrun{
@@ -22,24 +26,28 @@
 #' @importFrom stringr str_extract str_to_upper
 #' @export
 korbit_trading_pairs <- function(market = NULL) {
-  tryCatch({
-    res <- GET("https://api.korbit.co.kr/v2/currencyPairs",
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("코빗 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
-      `[[`("data") %>%
-      filter(status == "launched") %>%
-      transmute(
-        exchange = "korbit",
-        asset    = str_extract(symbol, "^\\w+(?=\\_)") %>% str_to_upper(),
-        quote    = str_extract(symbol, "(?<=\\_)\\w+$") %>% str_to_upper(),
-        symbol   = symbol,
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "코빗")
-  }, error = function(e) { message("코빗 오류: ", e$message); NULL })
+  if (!exists("pairs", envir = .korbit_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://api.korbit.co.kr/v2/currencyPairs",
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("코빗 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
+        `[[`("data") %>%
+        filter(status == "launched") %>%
+        transmute(
+          exchange = "korbit",
+          asset    = str_extract(symbol, "^\\w+(?=\\_)") %>% str_to_upper(),
+          quote    = str_extract(symbol, "(?<=\\_)\\w+$") %>% str_to_upper(),
+          symbol   = symbol,
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign("pairs", df, envir = .korbit_pairs_cache)
+    }, error = function(e) { message("코빗 오류: ", e$message); return(NULL) })
+  }
+  if (!exists("pairs", envir = .korbit_pairs_cache)) return(NULL)
+  .pick_symbol(.korbit_pairs_cache$pairs, market, "코빗")
 }
 
 
@@ -98,6 +106,71 @@ fetch_korbit <- function(market, count = 200) {
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
   }, error = function(e) { message("코빗 오류 (", market, "): ", e$message); NULL })
+}
+
+
+#' Fetch recent trade tick data from Korbit
+#'
+#' @description
+#' Returns the most recent trades for a given market from the Korbit public
+#' API (up to 500 trades). Korbit's public endpoint does not support
+#' cursor-based pagination, so results are limited to the latest trades that
+#' fall within `from`–`to`.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
+#'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_korbit_trades(
+#'   "BTC-KRW",
+#'   from = as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 09:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% filter distinct arrange
+#' @export
+get_korbit_trades <- function(market, from, to) {
+  sym <- korbit_trading_pairs(market)
+  if (is.null(sym)) { message("코빗: symbol 조회 실패 (", market, ")"); return(NULL) }
+  url <- paste0("https://api.korbit.co.kr/v2/trades?symbol=", sym, "&limit=500")
+  tryCatch({
+    res <- GET(url,
+               add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+               timeout(15))
+    if (status_code(res) != 200) {
+      message("코빗 HTTP 오류: ", status_code(res), " / ", market)
+      return(NULL)
+    }
+    parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+    if (is.null(parsed$success) || !isTRUE(parsed$success)) {
+      message("코빗 API 오류 / ", market)
+      return(NULL)
+    }
+    d <- parsed$data
+    if (is.null(d) || nrow(d) == 0) return(NULL)
+    df <- data.frame(
+      time_kst      = as.POSIXct(as.numeric(d$timestamp) / 1000,
+                                 origin = "1970-01-01", tz = "Asia/Seoul"),
+      trade_price   = as.numeric(d$price),
+      volume        = as.numeric(d$qty),
+      ask_bid       = ifelse(d$isBuyerTaker, "BID", "ASK"),
+      sequential_id = as.numeric(d$tradeId),
+      stringsAsFactors = FALSE
+    )
+    df %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("코빗 체결 오류: ", e$message); NULL })
 }
 
 
@@ -190,8 +263,10 @@ get_korbit_orderbook <- function(market, count = 30) {
 #' @param unit Character. Candle unit: `"min"`, `"hour"`, or `"day"`.
 #'   Defaults to `"min"`.
 #'
-#' @return A [data.frame] sorted by `time_kst` with duplicates removed, or
-#'   `NULL` on error.
+#' @return A [data.frame] with columns `time_kst`, `opening_price`,
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{

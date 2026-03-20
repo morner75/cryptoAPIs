@@ -1,3 +1,5 @@
+.coinbase_pairs_cache <- new.env(parent = emptyenv())
+
 #' Get trading pairs from Coinbase
 #'
 #' @description
@@ -9,7 +11,9 @@
 #'   returns the matching exchange-native symbol.
 #'
 #' @return A [tibble::tibble()] with columns `exchange`, `asset`, `quote`,
-#'   `symbol`, `market`, or `NULL` on error.
+#'   `symbol`, `market`, or `NULL` on error. When `market` is non-`NULL`,
+#'   returns the matching exchange-native symbol string (or `NULL` if not
+#'   found).
 #'
 #' @examples
 #' \dontrun{
@@ -22,23 +26,27 @@
 #' @importFrom dplyr %>% filter transmute
 #' @export
 coinbase_trading_pairs <- function(market = NULL) {
-  tryCatch({
-    res <- GET("https://api.exchange.coinbase.com/products",
-               accept("application/json"))
-    if (status_code(res) != 200) {
-      message("코인베이스 오류: HTTP ", status_code(res)); return(NULL)
-    }
-    df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
-      filter(status == "online") %>%
-      transmute(
-        exchange = "coinbase",
-        asset    = base_currency,
-        quote    = quote_currency,
-        symbol   = id,
-        market   = paste(asset, quote, sep = "-")
-      )
-    .pick_symbol(df, market, "코인베이스")
-  }, error = function(e) { message("코인베이스 오류: ", e$message); NULL })
+  if (!exists("pairs", envir = .coinbase_pairs_cache)) {
+    tryCatch({
+      res <- GET("https://api.exchange.coinbase.com/products",
+                 accept("application/json"))
+      if (status_code(res) != 200) {
+        message("코인베이스 오류: HTTP ", status_code(res)); return(NULL)
+      }
+      df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
+        filter(status == "online") %>%
+        transmute(
+          exchange = "coinbase",
+          asset    = base_currency,
+          quote    = quote_currency,
+          symbol   = id,
+          market   = paste(asset, quote, sep = "-")
+        )
+      assign("pairs", df, envir = .coinbase_pairs_cache)
+    }, error = function(e) { message("코인베이스 오류: ", e$message); return(NULL) })
+  }
+  if (!exists("pairs", envir = .coinbase_pairs_cache)) return(NULL)
+  .pick_symbol(.coinbase_pairs_cache$pairs, market, "코인베이스")
 }
 
 
@@ -110,15 +118,17 @@ fetch_coinbase <- function(market, count = 200) {
 #' @param unit Character. Candle unit: `"min"` (60 s), `"hour"` (3600 s), or
 #'   `"day"` (86400 s). Defaults to `"min"`.
 #'
-#' @return A [data.frame] sorted by `time_kst` with duplicates removed, or
-#'   `NULL` on error.
+#' @return A [data.frame] with columns `time_kst`, `opening_price`,
+#'   `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+#'   with duplicates removed. Returns `NULL` on error or when no data is
+#'   available.
 #'
 #' @examples
 #' \dontrun{
 #' fetch_coinbase_range(
 #'   "BTC-USD",
-#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
-#'   to   = as.POSIXct("2024-01-01 01:00:00", tz = "UTC")
+#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 01:00:00", tz = "Asia/Seoul")
 #' )
 #' }
 #'
@@ -168,4 +178,70 @@ fetch_coinbase_range <- function(market, from, to, unit = "min") {
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
   }, error = function(e) { message("코인베이스 범위 오류: ", e$message); NULL })
+}
+
+
+#' Fetch trade tick data from Coinbase over a date range
+#'
+#' @description
+#' Paginates through the Coinbase Exchange trades endpoint
+#' (`/products/{id}/trades`) to retrieve all trades between `from` and `to`.
+#' Uses `before` (trade ID) cursor-based pagination.
+#'
+#' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-USD"`).
+#' @param from POSIXct or Date. Start of the range (inclusive).
+#' @param to POSIXct or Date. End of the range (inclusive).
+#'
+#' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
+#'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_coinbase_trades(
+#'   "BTC-USD",
+#'   from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+#'   to   = as.POSIXct("2024-01-01 00:05:00", tz = "Asia/Seoul")
+#' )
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows filter distinct arrange
+#' @export
+get_coinbase_trades <- function(market, from, to) {
+  sym <- coinbase_trading_pairs(market)
+  if (is.null(sym)) { message("코인베이스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  all_rows <- list()
+  before   <- NULL
+  tryCatch({
+    repeat {
+      url <- paste0("https://api.exchange.coinbase.com/products/", sym, "/trades?limit=100",
+                    if (!is.null(before)) paste0("&before=", before) else "")
+      res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(15))
+      if (status_code(res) != 200) break
+      raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
+      df <- data.frame(
+        time_kst      = as.POSIXct(raw$time, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC"),
+        trade_price   = as.numeric(raw$price),
+        volume        = as.numeric(raw$size),
+        ask_bid       = ifelse(raw$side == "buy", "BID", "ASK"),
+        sequential_id = as.numeric(raw$trade_id),
+        stringsAsFactors = FALSE
+      )
+      attr(df$time_kst, "tzone") <- "Asia/Seoul"
+      all_rows <- c(all_rows, list(df))
+      oldest <- min(df$time_kst)
+      if (oldest <= from || nrow(df) < 100) break
+      before <- min(df$sequential_id)
+      Sys.sleep(0.1)
+    }
+    if (length(all_rows) == 0) return(NULL)
+    bind_rows(all_rows) %>%
+      filter(time_kst >= from, time_kst <= to) %>%
+      distinct(sequential_id, .keep_all = TRUE) %>%
+      arrange(time_kst)
+  }, error = function(e) { message("코인베이스 체결 오류: ", e$message); NULL })
 }

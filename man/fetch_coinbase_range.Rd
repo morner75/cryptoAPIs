@@ -17,8 +17,10 @@ fetch_coinbase_range(market, from, to, unit = "min")
 `"day"` (86400 s). Defaults to `"min"`.}
 }
 \value{
-A [data.frame] sorted by `time_kst` with duplicates removed, or
-  `NULL` on error.
+A [data.frame] with columns `time_kst`, `opening_price`,
+  `high_price`, `low_price`, `trade_price`, `volume`, sorted by `time_kst`
+  with duplicates removed. Returns `NULL` on error or when no data is
+  available.
 }
 \description{
 Iterates over time chunks (max 300 bars each) to retrieve all bars between
@@ -28,8 +30,8 @@ Iterates over time chunks (max 300 bars each) to retrieve all bars between
 \dontrun{
 fetch_coinbase_range(
   "BTC-USD",
-  from = as.POSIXct("2024-01-01 00:00:00", tz = "UTC"),
-  to   = as.POSIXct("2024-01-01 01:00:00", tz = "UTC")
+  from = as.POSIXct("2024-01-01 00:00:00", tz = "Asia/Seoul"),
+  to   = as.POSIXct("2024-01-01 01:00:00", tz = "Asia/Seoul")
 )
 }
 
