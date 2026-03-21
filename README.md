@@ -122,10 +122,10 @@ exchanges.
 ### Fetch trade ticks
 
 `get_*_trades()` retrieves individual executions within a time window.
-Exchanges that support cursor-based pagination (Upbit, Binance,
+Exchanges that support cursor-based pagination (Upbit, Bithumb, Binance,
 Coinbase, GOPAX, OKX) retrieve all trades in the range; exchanges with
-no pagination (Bithumb, Coinone, Korbit) are limited to the most recent
-trades available from the public endpoint.
+no pagination (Coinone, Korbit) are limited to the most recent trades
+available from the public endpoint.
 
 ``` r
 from <- as.POSIXct("2024-01-01 09:00:00", tz = "Asia/Seoul")
@@ -171,7 +171,7 @@ merged$upbit$`BTC-KRW`
 merged$binance$`BTC-USDT`
 ```
 
-### Risk alarm (Upbit)
+### Risk alarm (Upbit / Bithumb)
 
 `get_upbit_alarm()` scrapes the Upbit exchange pages to retrieve the
 current alarm tier (`"주의"` / `"경고"` / `"위험"`) for flagged markets.
@@ -180,6 +180,13 @@ Requires `chromote` and `rvest`.
 ``` r
 # All KRW markets currently under caution
 get_upbit_alarm(quote = "KRW", verbose = TRUE)
+```
+
+`get_bithumb_alarm()` fetches the same alarm information from the
+Bithumb public API directly — no headless browser required.
+
+``` r
+get_bithumb_alarm(quote = "KRW", verbose = TRUE)
 ```
 
 ## Output columns
