@@ -34,11 +34,11 @@ okx_trading_pairs <- function(market = NULL, inst_type = "SPOT") {
                  query  = list(instType = inst_type),
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("OKX 오류: HTTP ", status_code(res)); return(NULL)
+        message("OKX \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"))
       if (parsed$code != "0") {
-        message("OKX 오류: ", parsed$msg); return(NULL)
+        message("OKX \uc624\ub958: ", parsed$msg); return(NULL)
       }
       df <- parsed$data %>%
         filter(state == "live") %>%
@@ -50,7 +50,7 @@ okx_trading_pairs <- function(market = NULL, inst_type = "SPOT") {
           market   = paste(asset, quote, sep = "-")
         )
       assign(inst_type, df, envir = .okx_pairs_cache)
-    }, error = function(e) { message("OKX 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("OKX \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists(inst_type, envir = .okx_pairs_cache)) return(NULL)
   .pick_symbol(get(inst_type, envir = .okx_pairs_cache), market, "OKX")
@@ -81,7 +81,7 @@ okx_trading_pairs <- function(market = NULL, inst_type = "SPOT") {
 #' @export
 fetch_okx <- function(market, count = 100) {
   sym <- okx_trading_pairs(market)
-  if (is.null(sym)) { message("OKX: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("OKX: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0("https://www.okx.com/api/v5/market/candles",
                 "?instId=", sym, "&bar=1m&limit=", min(count, 300))
   tryCatch({
@@ -89,7 +89,7 @@ fetch_okx <- function(market, count = 100) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("OKX HTTP 오류: ", status_code(res), " / ", market); return(NULL)
+      message("OKX HTTP \uc624\ub958: ", status_code(res), " / ", market); return(NULL)
     }
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), simplifyVector = FALSE)
     if (is.null(parsed$data) || length(parsed$data) == 0) return(NULL)
@@ -103,7 +103,7 @@ fetch_okx <- function(market, count = 100) {
       volume        = as.numeric(r[[6]]),
       stringsAsFactors = FALSE
     ))) %>% arrange(time_kst)
-  }, error = function(e) { message("OKX 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("OKX \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -139,9 +139,9 @@ fetch_okx <- function(market, count = 100) {
 #' @export
 fetch_okx_range <- function(market, from, to, unit = "min") {
   sym <- okx_trading_pairs(market)
-  if (is.null(sym)) { message("OKX: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("OKX: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   bar_str <- switch(unit, "min" = "1m", "hour" = "1H", "day" = "1D",
-                    stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                    stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   from_ms  <- as.numeric(from) * 1000
   to_ms    <- as.numeric(to)   * 1000
   after_ms <- round(to_ms) + 1
@@ -178,7 +178,7 @@ fetch_okx_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("OKX 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("OKX \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -212,7 +212,7 @@ fetch_okx_range <- function(market, from, to, unit = "min") {
 #' @export
 get_okx_trades <- function(market, from, to) {
   sym <- okx_trading_pairs(market)
-  if (is.null(sym)) { message("OKX: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("OKX: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   all_rows <- list()
   after    <- NULL
   tryCatch({
@@ -247,5 +247,5 @@ get_okx_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("OKX 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("OKX \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }

@@ -32,7 +32,7 @@ upbit_trading_pairs <- function(market = NULL) {
                  query   = list(is_details = "false"),
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("업비트 오류: HTTP ", status_code(res)); return(NULL)
+        message("\uc5c5\ube44\ud2b8 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         transmute(
@@ -43,10 +43,10 @@ upbit_trading_pairs <- function(market = NULL) {
           market   = paste(asset, quote, sep = "-")
         )
       assign("pairs", df, envir = .upbit_pairs_cache)
-    }, error = function(e) { message("업비트 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\uc5c5\ube44\ud2b8 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists("pairs", envir = .upbit_pairs_cache)) return(NULL)
-  .pick_symbol(.upbit_pairs_cache$pairs, market, "업비트")
+  .pick_symbol(.upbit_pairs_cache$pairs, market, "\uc5c5\ube44\ud2b8")
 }
 
 
@@ -74,7 +74,7 @@ upbit_trading_pairs <- function(market = NULL) {
 #' @export
 fetch_upbit <- function(market, count = 60) {
   sym <- upbit_trading_pairs(market)
-  if (is.null(sym)) { message("업비트: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uc5c5\ube44\ud2b8: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.upbit.com/v1/candles/minutes/1",
     "?market=", sym, "&count=", count
@@ -95,7 +95,7 @@ fetch_upbit <- function(market, count = 60) {
       volume        = as.numeric(raw$candle_acc_trade_volume),
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
-  }, error = function(e) { message("업비트 오류: ", e$message); NULL })
+  }, error = function(e) { message("\uc5c5\ube44\ud2b8 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -131,9 +131,9 @@ fetch_upbit <- function(market, count = 60) {
 #' @export
 fetch_upbit_range <- function(market, from, to, unit = "min") {
   sym  <- upbit_trading_pairs(market)
-  if (is.null(sym)) { message("업비트: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uc5c5\ube44\ud2b8: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   path <- switch(unit, "min" = "minutes/1", "hour" = "minutes/60", "day" = "days",
-                 stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                 stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   cur_to   <- to
   all_rows <- list()
   tryCatch({
@@ -168,7 +168,7 @@ fetch_upbit_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("업비트 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\uc5c5\ube44\ud2b8 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -209,7 +209,7 @@ fetch_upbit_range <- function(market, from, to, unit = "min") {
 #' @export
 get_upbit_trades <- function(market, from, to) {
   sym <- upbit_trading_pairs(market)
-  if (is.null(sym)) { message("업비트: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uc5c5\ube44\ud2b8: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   all_rows <- list()
   cursor   <- NULL
   tryCatch({
@@ -249,7 +249,7 @@ get_upbit_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("업비트 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\uc5c5\ube44\ud2b8 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -291,7 +291,7 @@ get_upbit_trades <- function(market, from, to) {
 #' @export
 get_upbit_orderbook <- function(market, count = 30, level = 0) {
   sym <- upbit_trading_pairs(market)
-  if (is.null(sym)) { message("업비트: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uc5c5\ube44\ud2b8: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.upbit.com/v1/orderbook",
     "?markets=", sym, "&count=", count, "&level=", level
@@ -318,7 +318,7 @@ get_upbit_orderbook <- function(market, count = 30, level = 0) {
       level          = as.integer(ob$level),
       stringsAsFactors = FALSE
     ) %>% arrange(ask_price)
-  }, error = function(e) { message("업비트 오류: ", e$message); NULL })
+  }, error = function(e) { message("\uc5c5\ube44\ud2b8 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -361,7 +361,7 @@ get_upbit_alarm <- function(
     wait_sec = 2,
     verbose  = FALSE
 ) {
-  if (verbose) message("[1/2] 업비트 공식 API 조회 중...")
+  if (verbose) message("[1/2] \uc5c5\ube44\ud2b8 \uacf5\uc2dd API \uc870\ud68c \uc911...")
 
   raw <- tryCatch({
     resp <- request("https://api.upbit.com/v1/market/all?is_details=true") |>
@@ -370,7 +370,7 @@ get_upbit_alarm <- function(
       req_perform()
     fromJSON(resp_body_string(resp), simplifyDataFrame = TRUE)
   }, error = function(e) {
-    message("업비트 API 오류: ", e$message)
+    message("\uc5c5\ube44\ud2b8 API \uc624\ub958: ", e$message)
     NULL
   })
   if (is.null(raw)) return(NULL)
@@ -393,22 +393,22 @@ get_upbit_alarm <- function(
   }
 
   if (nrow(api_df) == 0) {
-    if (verbose) message("주의/경고/위험 종목이 없습니다.")
+    if (verbose) message("\uc8fc\uc758/\uacbd\uace0/\uc704\ud5d8 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.")
     return(tibble(market = character(), symbol = character(),
                   alarm = character(), reason = character()))
   }
 
-  if (verbose) message("[2/2] 업비트 웹페이지 크롤링 중... (종목 수: ", nrow(api_df), ")")
+  if (verbose) message("[2/2] \uc5c5\ube44\ud2b8 \uc6f9\ud398\uc774\uc9c0 \ud06c\ub864\ub9c1 \uc911... (\uc885\ubaa9 \uc218: ", nrow(api_df), ")")
 
   b <- tryCatch(chromote::ChromoteSession$new(),
-                error = function(e) { message("Chrome 실행 오류: ", e$message); NULL })
+                error = function(e) { message("Chrome \uc2e4\ud589 \uc624\ub958: ", e$message); NULL })
   if (is.null(b)) {
-    message("크롬 실행 불가 — 크롤링 불가")
+    message("\ud06c\ub86c \uc2e4\ud589 \ubd88\uac00 \u2014 \ud06c\ub864\ub9c1 \ubd88\uac00")
     return(NULL)
   }
   on.exit(try(b$close(), silent = TRUE), add = TRUE)
 
-  tier_re <- "(위험|경고|주의)(거래량|입금량|가격|소수|글로벌)"
+  tier_re <- "(\uc704\ud5d8|\uacbd\uace0|\uc8fc\uc758)(\uac70\ub798\ub7c9|\uc785\uae08\ub7c9|\uac00\uaca9|\uc18c\uc218|\uae00\ub85c\ubc8c)"
 
   detect_alarm <- function(market_code) {
     url <- paste0("https://upbit.com/exchange?code=CRIX.UPBIT.", market_code)
@@ -419,7 +419,7 @@ get_upbit_alarm <- function(
       page_text <- str_squish(rvest::html_text2(rvest::read_html(html)))
 
       if (!str_detect(page_text, tier_re)) {
-        if (verbose) message("  ", market_code, " → 미감지")
+        if (verbose) message("  ", market_code, " \u2192 \ubbf8\uac10\uc9c0")
         return(tibble(market = market_code, alarm = NA_character_, reason = NA_character_))
       }
 
@@ -428,13 +428,13 @@ get_upbit_alarm <- function(
       reason <- str_trim(paste0(m[1, 3], m[1, 4]))
       trimmed <- str_extract(reason, paste0("^.*?(?=", tier_re, ")")) |> str_trim()
       if (!is.na(trimmed) && nchar(trimmed) > 0) reason <- trimmed
-      natural <- str_extract(reason, "^.+?(?:이상|높음|낮음|급락|집중)") |> str_trim()
+      natural <- str_extract(reason, "^.+?(?:\uc774\uc0c1|\ub192\uc74c|\ub0ae\uc74c|\uae09\ub77d|\uc9d1\uc911)") |> str_trim()
       if (!is.na(natural) && nchar(natural) > 0) reason <- natural
 
-      if (verbose) message("  ", market_code, " → ", alarm, ": ", reason)
+      if (verbose) message("  ", market_code, " \u2192 ", alarm, ": ", reason)
       tibble(market = market_code, alarm = alarm, reason = reason)
     }, error = function(e) {
-      message("  크롤링 오류 (", market_code, "): ", e$message)
+      message("  \ud06c\ub864\ub9c1 \uc624\ub958 (", market_code, "): ", e$message)
       tibble(market = market_code, alarm = NA_character_, reason = NA_character_)
     })
   }

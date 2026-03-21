@@ -31,7 +31,7 @@ coinbase_trading_pairs <- function(market = NULL) {
       res <- GET("https://api.exchange.coinbase.com/products",
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("코인베이스 오류: HTTP ", status_code(res)); return(NULL)
+        message("\ucf54\uc778\ubca0\uc774\uc2a4 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         filter(status == "online") %>%
@@ -43,10 +43,10 @@ coinbase_trading_pairs <- function(market = NULL) {
           market   = paste(asset, quote, sep = "-")
         )
       assign("pairs", df, envir = .coinbase_pairs_cache)
-    }, error = function(e) { message("코인베이스 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\ucf54\uc778\ubca0\uc774\uc2a4 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists("pairs", envir = .coinbase_pairs_cache)) return(NULL)
-  .pick_symbol(.coinbase_pairs_cache$pairs, market, "코인베이스")
+  .pick_symbol(.coinbase_pairs_cache$pairs, market, "\ucf54\uc778\ubca0\uc774\uc2a4")
 }
 
 
@@ -74,7 +74,7 @@ coinbase_trading_pairs <- function(market = NULL) {
 #' @export
 fetch_coinbase <- function(market, count = 200) {
   sym <- coinbase_trading_pairs(market)
-  if (is.null(sym)) { message("코인베이스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\ubca0\uc774\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   end_sec   <- as.integer(Sys.time())
   start_sec <- end_sec - count * 60
   url <- paste0(
@@ -86,7 +86,7 @@ fetch_coinbase <- function(market, count = 200) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("코인베이스 HTTP 오류: ", status_code(res), " / ", market)
+      message("\ucf54\uc778\ubca0\uc774\uc2a4 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), simplifyVector = TRUE)
@@ -102,7 +102,7 @@ fetch_coinbase <- function(market, count = 200) {
       volume        = as.numeric(m[, 6]),
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
-  }, error = function(e) { message("코인베이스 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\ubca0\uc774\uc2a4 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -138,9 +138,9 @@ fetch_coinbase <- function(market, count = 200) {
 #' @export
 fetch_coinbase_range <- function(market, from, to, unit = "min") {
   sym <- coinbase_trading_pairs(market)
-  if (is.null(sym)) { message("코인베이스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\ubca0\uc774\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   granularity <- switch(unit, "min" = 60L, "hour" = 3600L, "day" = 86400L,
-                         stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                         stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   chunk     <- 300L * granularity
   start_sec <- as.integer(from)
   end_sec   <- as.integer(to)
@@ -177,7 +177,7 @@ fetch_coinbase_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("코인베이스 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\ubca0\uc774\uc2a4 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -211,7 +211,7 @@ fetch_coinbase_range <- function(market, from, to, unit = "min") {
 #' @export
 get_coinbase_trades <- function(market, from, to) {
   sym <- coinbase_trading_pairs(market)
-  if (is.null(sym)) { message("코인베이스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\ubca0\uc774\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   all_rows <- list()
   before   <- NULL
   tryCatch({
@@ -243,5 +243,5 @@ get_coinbase_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("코인베이스 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\ubca0\uc774\uc2a4 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }

@@ -7,7 +7,7 @@ NULL
   if (is.null(market)) return(df)
   matched <- df$symbol[df$market == market]
   if (length(matched) == 0) {
-    message(exch_name, ": market '", market, "' 없음")
+    message(exch_name, ": market '", market, "' \uc5c6\uc74c")
     return(NULL)
   }
   matched[[1]]

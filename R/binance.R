@@ -28,7 +28,7 @@ binance_trading_pairs <- function(market = NULL) {
       res <- GET("https://api.binance.com/api/v3/exchangeInfo",
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("바이낸스 오류: HTTP ", status_code(res)); return(NULL)
+        message("\ubc14\uc774\ub0b8\uc2a4 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         `[[`("symbols") %>%
@@ -41,10 +41,10 @@ binance_trading_pairs <- function(market = NULL) {
           market   = paste(asset, quote, sep = "-")
         )
       assign("pairs", df, envir = .binance_pairs_cache)
-    }, error = function(e) { message("바이낸스 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\ubc14\uc774\ub0b8\uc2a4 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists("pairs", envir = .binance_pairs_cache)) return(NULL)
-  .pick_symbol(.binance_pairs_cache$pairs, market, "바이낸스")
+  .pick_symbol(.binance_pairs_cache$pairs, market, "\ubc14\uc774\ub0b8\uc2a4")
 }
 
 
@@ -72,7 +72,7 @@ binance_trading_pairs <- function(market = NULL) {
 #' @export
 fetch_binance <- function(market, count = 200) {
   sym <- binance_trading_pairs(market)
-  if (is.null(sym)) { message("바이낸스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ubc14\uc774\ub0b8\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.binance.com/api/v3/klines",
     "?symbol=", sym, "&interval=1m&limit=", count
@@ -82,7 +82,7 @@ fetch_binance <- function(market, count = 200) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("바이낸스 HTTP 오류: ", status_code(res), " / ", market)
+      message("\ubc14\uc774\ub0b8\uc2a4 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), simplifyVector = TRUE)
@@ -98,7 +98,7 @@ fetch_binance <- function(market, count = 200) {
       volume        = as.numeric(m[, 6]),
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
-  }, error = function(e) { message("바이낸스 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\ubc14\uc774\ub0b8\uc2a4 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -134,9 +134,9 @@ fetch_binance <- function(market, count = 200) {
 #' @export
 fetch_binance_range <- function(market, from, to, unit = "min") {
   sym <- binance_trading_pairs(market)
-  if (is.null(sym)) { message("바이낸스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ubc14\uc774\ub0b8\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   interval_str <- switch(unit, "min" = "1m", "hour" = "1h", "day" = "1d",
-                          stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                          stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   start_ms <- as.numeric(from) * 1000
   end_ms   <- as.numeric(to)   * 1000
   all_rows <- list()
@@ -173,7 +173,7 @@ fetch_binance_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("바이낸스 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ubc14\uc774\ub0b8\uc2a4 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -207,7 +207,7 @@ fetch_binance_range <- function(market, from, to, unit = "min") {
 #' @export
 get_binance_trades <- function(market, from, to) {
   sym <- binance_trading_pairs(market)
-  if (is.null(sym)) { message("바이낸스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ubc14\uc774\ub0b8\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   from_ms  <- round(as.numeric(from) * 1000)
   to_ms    <- round(as.numeric(to)   * 1000)
   all_rows <- list()
@@ -247,5 +247,5 @@ get_binance_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("바이낸스 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ubc14\uc774\ub0b8\uc2a4 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }

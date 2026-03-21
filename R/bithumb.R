@@ -33,7 +33,7 @@ bithumb_trading_pairs <- function(market = NULL) {
                  content_type("application/octet-stream"),
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("빗썸 오류: HTTP ", status_code(res)); return(NULL)
+        message("\ube57\uc378 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         transmute(
@@ -44,10 +44,10 @@ bithumb_trading_pairs <- function(market = NULL) {
           market   = paste(asset, quote, sep = "-")
         )
       assign("pairs", df, envir = .bithumb_pairs_cache)
-    }, error = function(e) { message("빗썸 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\ube57\uc378 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists("pairs", envir = .bithumb_pairs_cache)) return(NULL)
-  .pick_symbol(.bithumb_pairs_cache$pairs, market, "빗썸")
+  .pick_symbol(.bithumb_pairs_cache$pairs, market, "\ube57\uc378")
 }
 
 
@@ -76,7 +76,7 @@ bithumb_trading_pairs <- function(market = NULL) {
 #' @export
 fetch_bithumb <- function(market, count = 200) {
   sym <- bithumb_trading_pairs(market)
-  if (is.null(sym)) { message("빗썸: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ube57\uc378: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.bithumb.com/v1/candles/minutes/1?market=", sym,
     "&count=", count
@@ -86,7 +86,7 @@ fetch_bithumb <- function(market, count = 200) {
     if (status_code(res) != 200) return(NULL)
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (!is.data.frame(parsed)) {
-      message("빗썸 응답 파싱 오류 (", market, "): 데이터프레임이 아님")
+      message("\ube57\uc378 \uc751\ub2f5 \ud30c\uc2f1 \uc624\ub958 (", market, "): \ub370\uc774\ud130\ud504\ub808\uc784\uc774 \uc544\ub2d8")
       return(NULL)
     }
     parsed %>%
@@ -96,7 +96,7 @@ fetch_bithumb <- function(market, count = 200) {
         high_price, low_price, trade_price,
         volume = candle_acc_trade_volume
       ) %>% arrange(time_kst)
-  }, error = function(e) { message("빗썸 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ube57\uc378 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -133,9 +133,9 @@ fetch_bithumb <- function(market, count = 200) {
 #' @export
 fetch_bithumb_range <- function(market, from, to, unit = "min") {
   sym  <- bithumb_trading_pairs(market)
-  if (is.null(sym)) { message("빗썸: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ube57\uc378: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   path <- switch(unit, "min" = "minutes/1", "hour" = "minutes/60", "day" = "days",
-                 stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                 stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   cur_to   <- to
   all_rows <- list()
   tryCatch({
@@ -169,7 +169,7 @@ fetch_bithumb_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("빗썸 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ube57\uc378 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -203,7 +203,7 @@ fetch_bithumb_range <- function(market, from, to, unit = "min") {
 #' @export
 get_bithumb_trades <- function(market, from, to) {
   sym <- bithumb_trading_pairs(market)
-  if (is.null(sym)) { message("빗썸: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ube57\uc378: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   all_rows <- list()
   cursor   <- NULL
   tryCatch({
@@ -241,7 +241,7 @@ get_bithumb_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("빗썸 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ube57\uc378 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -283,7 +283,7 @@ get_bithumb_trades <- function(market, from, to) {
 #' @export
 get_bithumb_orderbook <- function(market, count = 30, level = 0) {
   sym <- bithumb_trading_pairs(market)
-  if (is.null(sym)) { message("빗썸: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ube57\uc378: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.bithumb.com/v1/orderbook",
     "?markets=", sym, "&count=", count, "&level=", level
@@ -310,7 +310,7 @@ get_bithumb_orderbook <- function(market, count = 30, level = 0) {
       level          = as.integer(level),
       stringsAsFactors = FALSE
     ) %>% arrange(ask_price)
-  }, error = function(e) { message("빗썸 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ube57\uc378 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -342,17 +342,17 @@ get_bithumb_orderbook <- function(market, count = 30, level = 0) {
 #' @export
 get_bithumb_alarm <- function(quote = NULL, verbose = FALSE) {
 
-  step_map   <- c(CAUTION = "주의", WARNING = "경고", DANGER = "위험")
-  step_order <- c("주의" = 1L,      "경고"  = 2L,    "위험" = 3L)
+  step_map   <- c(CAUTION = "\uc8fc\uc758", WARNING = "\uacbd\uace0", DANGER = "\uc704\ud5d8")
+  step_order <- c("\uc8fc\uc758" = 1L,      "\uacbd\uace0"  = 2L,    "\uc704\ud5d8" = 3L)
   type_map   <- c(
-    PRICE_SUDDEN_FLUCTUATION          = "가격 급등락",
-    TRADING_VOLUME_SUDDEN_FLUCTUATION = "거래량 급증",
-    DEPOSIT_AMOUNT_SUDDEN_FLUCTUATION = "입금량 급증",
-    SPECIFIC_ACCOUNT_HIGH_TRANSACTION = "소수계정 집중",
-    PRICE_DIFFERENCE_HIGH             = "글로벌 시세 대비 이격"
+    PRICE_SUDDEN_FLUCTUATION          = "\uac00\uaca9 \uae09\ub4f1\ub77d",
+    TRADING_VOLUME_SUDDEN_FLUCTUATION = "\uac70\ub798\ub7c9 \uae09\uc99d",
+    DEPOSIT_AMOUNT_SUDDEN_FLUCTUATION = "\uc785\uae08\ub7c9 \uae09\uc99d",
+    SPECIFIC_ACCOUNT_HIGH_TRANSACTION = "\uc18c\uc218\uacc4\uc815 \uc9d1\uc911",
+    PRICE_DIFFERENCE_HIGH             = "\uae00\ub85c\ubc8c \uc2dc\uc138 \ub300\ube44 \uc774\uaca9"
   )
 
-  if (verbose) message("빗썸 경보제 API 조회 중...")
+  if (verbose) message("\ube57\uc378 \uacbd\ubcf4\uc81c API \uc870\ud68c \uc911...")
 
   raw <- tryCatch({
     resp <- request("https://api.bithumb.com/v1/market/virtual_asset_warning") |>
@@ -361,12 +361,12 @@ get_bithumb_alarm <- function(quote = NULL, verbose = FALSE) {
       req_perform()
     fromJSON(resp_body_string(resp), simplifyDataFrame = TRUE)
   }, error = function(e) {
-    message("빗썸 경보제 API 오류: ", e$message)
+    message("\ube57\uc378 \uacbd\ubcf4\uc81c API \uc624\ub958: ", e$message)
     NULL
   })
 
   if (is.null(raw) || length(raw) == 0 || nrow(as.data.frame(raw)) == 0) {
-    if (verbose) message("경보 종목이 없습니다.")
+    if (verbose) message("\uacbd\ubcf4 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.")
     return(tibble(market = character(), symbol = character(),
                   alarm = character(), reason = character()))
   }
@@ -382,7 +382,7 @@ get_bithumb_alarm <- function(quote = NULL, verbose = FALSE) {
   }
 
   if (nrow(df) == 0) {
-    if (verbose) message("해당 마켓에 경보 종목이 없습니다.")
+    if (verbose) message("\ud574\ub2f9 \ub9c8\ucf13\uc5d0 \uacbd\ubcf4 \uc885\ubaa9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.")
     return(tibble(market = character(), symbol = character(),
                   alarm = character(), reason = character()))
   }
@@ -403,5 +403,5 @@ get_bithumb_alarm <- function(quote = NULL, verbose = FALSE) {
       )
     ) |>
     select(market, symbol, alarm, reason) |>
-    arrange(desc(match(alarm, c("위험", "경고", "주의"))), market)
+    arrange(desc(match(alarm, c("\uc704\ud5d8", "\uacbd\uace0", "\uc8fc\uc758"))), market)
 }

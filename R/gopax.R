@@ -31,7 +31,7 @@ gopax_trading_pairs <- function(market = NULL) {
       res <- GET("https://api.gopax.co.kr/trading-pairs",
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("고팍스 오류: HTTP ", status_code(res)); return(NULL)
+        message("\uace0\ud30d\uc2a4 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         transmute(
@@ -42,10 +42,10 @@ gopax_trading_pairs <- function(market = NULL) {
           market   = paste(asset, quote, sep = "-")
         )
       assign("pairs", df, envir = .gopax_pairs_cache)
-    }, error = function(e) { message("고팍스 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\uace0\ud30d\uc2a4 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists("pairs", envir = .gopax_pairs_cache)) return(NULL)
-  .pick_symbol(.gopax_pairs_cache$pairs, market, "고팍스")
+  .pick_symbol(.gopax_pairs_cache$pairs, market, "\uace0\ud30d\uc2a4")
 }
 
 
@@ -73,7 +73,7 @@ gopax_trading_pairs <- function(market = NULL) {
 #' @export
 fetch_gopax <- function(market, count = 200) {
   sym <- gopax_trading_pairs(market)
-  if (is.null(sym)) { message("고팍스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uace0\ud30d\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   end_ms   <- round(as.numeric(Sys.time()) * 1000)
   start_ms <- end_ms - max(count * 60 * 60 * 1000, 24 * 60 * 60 * 1000)
   url <- paste0(
@@ -86,13 +86,13 @@ fetch_gopax <- function(market, count = 200) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("고팍스 HTTP 오류: ", status_code(res), " / ", market)
+      message("\uace0\ud30d\uc2a4 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), simplifyVector = TRUE)
     if (is.null(raw) || length(raw) == 0) return(NULL)
     m <- if (is.matrix(raw)) raw else do.call(rbind, lapply(raw, as.numeric))
-    if (ncol(m) < 6) { message("고팍스 컬럼 부족: ", ncol(m), "개"); return(NULL) }
+    if (ncol(m) < 6) { message("\uace0\ud30d\uc2a4 \uceec\ub7fc \ubd80\uc871: ", ncol(m), "\uac1c"); return(NULL) }
     data.frame(
       time_kst      = as.POSIXct(m[, 1] / 1000, origin = "1970-01-01", tz = "Asia/Seoul"),
       opening_price = as.numeric(m[, 4]),
@@ -102,7 +102,7 @@ fetch_gopax <- function(market, count = 200) {
       volume        = as.numeric(m[, 6]),
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
-  }, error = function(e) { message("고팍스 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\uace0\ud30d\uc2a4 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -136,7 +136,7 @@ fetch_gopax <- function(market, count = 200) {
 #' @export
 get_gopax_trades <- function(market, from, to) {
   sym <- gopax_trading_pairs(market)
-  if (is.null(sym)) { message("고팍스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uace0\ud30d\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   all_rows <- list()
   pastmax  <- NULL
   before_s <- round(as.numeric(to))
@@ -172,7 +172,7 @@ get_gopax_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("고팍스 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\uace0\ud30d\uc2a4 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -214,14 +214,14 @@ get_gopax_trades <- function(market, from, to) {
 #' @export
 get_gopax_orderbook <- function(market, count = 30, level = 0) {
   sym <- gopax_trading_pairs(market)
-  if (is.null(sym)) { message("고팍스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uace0\ud30d\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0("https://api.gopax.co.kr/trading-pairs/", sym, "/book")
   tryCatch({
     res <- GET(url,
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("고팍스 HTTP 오류: ", status_code(res), " / ", market)
+      message("\uace0\ud30d\uc2a4 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), simplifyVector = TRUE)
@@ -243,7 +243,7 @@ get_gopax_orderbook <- function(market, count = 30, level = 0) {
       level          = as.integer(level),
       stringsAsFactors = FALSE
     ) %>% arrange(ask_price)
-  }, error = function(e) { message("고팍스 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\uace0\ud30d\uc2a4 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -279,9 +279,9 @@ get_gopax_orderbook <- function(market, count = 30, level = 0) {
 #' @export
 fetch_gopax_range <- function(market, from, to, unit = "min") {
   sym <- gopax_trading_pairs(market)
-  if (is.null(sym)) { message("고팍스: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\uace0\ud30d\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   interval_min <- switch(unit, "min" = 1L, "hour" = 30L, "day" = 1440L,
-                          stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                          stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   chunk_ms <- 1024 * as.numeric(interval_min) * 60 * 1000
   all_rows <- list()
   tryCatch({
@@ -319,5 +319,5 @@ fetch_gopax_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("고팍스 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\uace0\ud30d\uc2a4 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }

@@ -31,7 +31,7 @@ korbit_trading_pairs <- function(market = NULL) {
       res <- GET("https://api.korbit.co.kr/v2/currencyPairs",
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("코빗 오류: HTTP ", status_code(res)); return(NULL)
+        message("\ucf54\ube57 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         `[[`("data") %>%
@@ -44,10 +44,10 @@ korbit_trading_pairs <- function(market = NULL) {
           market   = paste(asset, quote, sep = "-")
         )
       assign("pairs", df, envir = .korbit_pairs_cache)
-    }, error = function(e) { message("코빗 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\ucf54\ube57 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists("pairs", envir = .korbit_pairs_cache)) return(NULL)
-  .pick_symbol(.korbit_pairs_cache$pairs, market, "코빗")
+  .pick_symbol(.korbit_pairs_cache$pairs, market, "\ucf54\ube57")
 }
 
 
@@ -75,7 +75,7 @@ korbit_trading_pairs <- function(market = NULL) {
 #' @export
 fetch_korbit <- function(market, count = 200) {
   sym <- korbit_trading_pairs(market)
-  if (is.null(sym)) { message("코빗: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\ube57: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.korbit.co.kr/v2/candles",
     "?symbol=", sym, "&interval=1&limit=", count
@@ -85,12 +85,12 @@ fetch_korbit <- function(market, count = 200) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("코빗 HTTP 오류: ", status_code(res), " / ", market)
+      message("\ucf54\ube57 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (is.null(parsed$success) || !isTRUE(parsed$success)) {
-      message("코빗 API 오류 / ", market)
+      message("\ucf54\ube57 API \uc624\ub958 / ", market)
       return(NULL)
     }
     d <- parsed$data
@@ -105,7 +105,7 @@ fetch_korbit <- function(market, count = 200) {
       volume        = as.numeric(d$volume),
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
-  }, error = function(e) { message("코빗 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\ube57 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -140,19 +140,19 @@ fetch_korbit <- function(market, count = 200) {
 #' @export
 get_korbit_trades <- function(market, from, to) {
   sym <- korbit_trading_pairs(market)
-  if (is.null(sym)) { message("코빗: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\ube57: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0("https://api.korbit.co.kr/v2/trades?symbol=", sym, "&limit=500")
   tryCatch({
     res <- GET(url,
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(15))
     if (status_code(res) != 200) {
-      message("코빗 HTTP 오류: ", status_code(res), " / ", market)
+      message("\ucf54\ube57 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (is.null(parsed$success) || !isTRUE(parsed$success)) {
-      message("코빗 API 오류 / ", market)
+      message("\ucf54\ube57 API \uc624\ub958 / ", market)
       return(NULL)
     }
     d <- parsed$data
@@ -170,7 +170,7 @@ get_korbit_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("코빗 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\ube57 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -210,7 +210,7 @@ get_korbit_trades <- function(market, from, to) {
 #' @export
 get_korbit_orderbook <- function(market, count = 30) {
   sym <- korbit_trading_pairs(market)
-  if (is.null(sym)) { message("코빗: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\ube57: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.korbit.co.kr/v2/orderbook",
     "?symbol=", sym, "&limit=", count
@@ -220,12 +220,12 @@ get_korbit_orderbook <- function(market, count = 30) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("코빗 HTTP 오류: ", status_code(res), " / ", market)
+      message("\ucf54\ube57 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (is.null(parsed$success) || !isTRUE(parsed$success)) {
-      message("코빗 API 오류 / ", market)
+      message("\ucf54\ube57 API \uc624\ub958 / ", market)
       return(NULL)
     }
     d    <- parsed$data
@@ -247,7 +247,7 @@ get_korbit_orderbook <- function(market, count = 30) {
       level          = 0L,
       stringsAsFactors = FALSE
     ) %>% arrange(ask_price)
-  }, error = function(e) { message("코빗 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\ube57 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -283,9 +283,9 @@ get_korbit_orderbook <- function(market, count = 30) {
 #' @export
 fetch_korbit_range <- function(market, from, to, unit = "min") {
   sym <- korbit_trading_pairs(market)
-  if (is.null(sym)) { message("코빗: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\ube57: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   interval_str <- switch(unit, "min" = "1", "hour" = "60", "day" = "1D",
-                          stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                          stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   step_ms    <- switch(unit, "min" = 60000, "hour" = 3600000, "day" = 86400000)
   cur_before <- round(as.numeric(to) * 1000) + step_ms
   from_ms    <- round(as.numeric(from) * 1000)
@@ -326,5 +326,5 @@ fetch_korbit_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("코빗 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\ube57 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }

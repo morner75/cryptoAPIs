@@ -33,7 +33,7 @@ coinone_trading_pairs <- function(market = NULL, quote = "KRW") {
       res <- GET(str_c("https://api.coinone.co.kr/public/v2/markets/", quote),
                  accept("application/json"))
       if (status_code(res) != 200) {
-        message("코인원 오류: HTTP ", status_code(res)); return(NULL)
+        message("\ucf54\uc778\uc6d0 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
       }
       df <- fromJSON(content(res, as = "text", encoding = "UTF-8")) %>%
         `[[`("markets") %>%
@@ -45,10 +45,10 @@ coinone_trading_pairs <- function(market = NULL, quote = "KRW") {
           market   = paste(asset, quote, sep = "-")
         )
       assign(quote, df, envir = .coinone_pairs_cache)
-    }, error = function(e) { message("코인원 오류: ", e$message); return(NULL) })
+    }, error = function(e) { message("\ucf54\uc778\uc6d0 \uc624\ub958: ", e$message); return(NULL) })
   }
   if (!exists(quote, envir = .coinone_pairs_cache)) return(NULL)
-  .pick_symbol(get(quote, envir = .coinone_pairs_cache), market, "코인원")
+  .pick_symbol(get(quote, envir = .coinone_pairs_cache), market, "\ucf54\uc778\uc6d0")
 }
 
 
@@ -78,7 +78,7 @@ coinone_trading_pairs <- function(market = NULL, quote = "KRW") {
 fetch_coinone <- function(market, count = 200) {
   quote <- str_extract(market, "[^-]+$")
   sym   <- coinone_trading_pairs(market, quote = quote)
-  if (is.null(sym)) { message("코인원: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\uc6d0: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.coinone.co.kr/public/v2/chart/", quote, "/", sym,
     "?interval=1m&size=", count
@@ -88,12 +88,12 @@ fetch_coinone <- function(market, count = 200) {
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                timeout(10))
     if (status_code(res) != 200) {
-      message("코인원 HTTP 오류: ", status_code(res), " / ", market)
+      message("\ucf54\uc778\uc6d0 HTTP \uc624\ub958: ", status_code(res), " / ", market)
       return(NULL)
     }
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (is.null(parsed$result) || parsed$result != "success") {
-      message("코인원 API 오류: ", parsed$error_code, " / ", market)
+      message("\ucf54\uc778\uc6d0 API \uc624\ub958: ", parsed$error_code, " / ", market)
       return(NULL)
     }
     ch <- parsed$chart
@@ -108,7 +108,7 @@ fetch_coinone <- function(market, count = 200) {
       volume        = as.numeric(ch$target_volume),
       stringsAsFactors = FALSE
     ) %>% arrange(time_kst)
-  }, error = function(e) { message("코인원 오류 (", market, "): ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\uc6d0 \uc624\ub958 (", market, "): ", e$message); NULL })
 }
 
 
@@ -145,7 +145,7 @@ fetch_coinone <- function(market, count = 200) {
 get_coinone_trades <- function(market, from, to) {
   quote_cur <- str_extract(market, "[^-]+$")
   sym <- coinone_trading_pairs(market, quote = quote_cur)
-  if (is.null(sym)) { message("코인원: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\uc6d0: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0("https://api.coinone.co.kr/public/v2/trades/", quote_cur, "/", sym, "/?size=200")
   tryCatch({
     res <- GET(url,
@@ -154,7 +154,7 @@ get_coinone_trades <- function(market, from, to) {
     if (status_code(res) != 200) return(NULL)
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (is.null(parsed$result) || parsed$result != "success") {
-      message("코인원 API 오류: ", parsed$error_code, " / ", market)
+      message("\ucf54\uc778\uc6d0 API \uc624\ub958: ", parsed$error_code, " / ", market)
       return(NULL)
     }
     tx <- parsed$transactions
@@ -172,7 +172,7 @@ get_coinone_trades <- function(market, from, to) {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("코인원 체결 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\uc6d0 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -214,7 +214,7 @@ get_coinone_trades <- function(market, from, to) {
 get_coinone_orderbook <- function(market, count = 30) {
   quote_cur <- str_extract(market, "[^-]+$")
   sym <- coinone_trading_pairs(market, quote = quote_cur)
-  if (is.null(sym)) { message("코인원: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\uc6d0: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   url <- paste0(
     "https://api.coinone.co.kr/public/v2/orderbook/", quote_cur, "/", sym
   )
@@ -225,7 +225,7 @@ get_coinone_orderbook <- function(market, count = 30) {
     if (status_code(res) != 200) return(NULL)
     parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
     if (is.null(parsed$result) || parsed$result != "success") {
-      message("코인원 API 오류: ", parsed$error_code, " / ", market)
+      message("\ucf54\uc778\uc6d0 API \uc624\ub958: ", parsed$error_code, " / ", market)
       return(NULL)
     }
     asks <- parsed$asks
@@ -246,7 +246,7 @@ get_coinone_orderbook <- function(market, count = 30) {
       level          = 0L,
       stringsAsFactors = FALSE
     ) %>% arrange(ask_price)
-  }, error = function(e) { message("코인원 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\uc6d0 \uc624\ub958: ", e$message); NULL })
 }
 
 
@@ -284,9 +284,9 @@ get_coinone_orderbook <- function(market, count = 30) {
 fetch_coinone_range <- function(market, from, to, unit = "min") {
   quote <- str_extract(market, "[^-]+$")
   sym   <- coinone_trading_pairs(market, quote = quote)
-  if (is.null(sym)) { message("코인원: symbol 조회 실패 (", market, ")"); return(NULL) }
+  if (is.null(sym)) { message("\ucf54\uc778\uc6d0: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   interval_str <- switch(unit, "min" = "1m", "hour" = "1h", "day" = "1d",
-                          stop("unit은 'min', 'hour', 'day' 중 하나여야 합니다."))
+                          stop("unit\uc740 'min', 'hour', 'day' \uc911 \ud558\ub098\uc5ec\uc57c \ud569\ub2c8\ub2e4."))
   cur_ts   <- round(as.numeric(to) * 1000)
   from_ms  <- round(as.numeric(from) * 1000)
   all_rows <- list()
@@ -323,5 +323,5 @@ fetch_coinone_range <- function(market, from, to, unit = "min") {
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(time_kst, .keep_all = TRUE) %>%
       arrange(time_kst)
-  }, error = function(e) { message("코인원 범위 오류: ", e$message); NULL })
+  }, error = function(e) { message("\ucf54\uc778\uc6d0 \ubc94\uc704 \uc624\ub958: ", e$message); NULL })
 }

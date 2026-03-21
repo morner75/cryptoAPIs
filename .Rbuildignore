@@ -1,5 +1,7 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^tmp$
 ^CLAUDE\.md$
 ^\.claude$
 ^README\.Rmd$
+
