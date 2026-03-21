@@ -267,6 +267,3 @@ get_bithumb_alarm(quote = "KRW", verbose = TRUE)
 | `chromote` *(Suggests)* | Headless Chrome for `get_upbit_alarm` |
 | `rvest` *(Suggests)* | HTML parsing for `get_upbit_alarm` |
 
-## License
-
-MIT © 2024

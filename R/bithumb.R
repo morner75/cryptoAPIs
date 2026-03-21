@@ -209,7 +209,7 @@ get_bithumb_trades <- function(market, from, to) {
   tryCatch({
     repeat {
       if (is.null(cursor)) {
-        to_str <- URLencode(format(to, "%Y-%m-%d %H:%M:%S", tz = "Asia/Seoul"))
+        to_str <- URLencode(format(to, "%H:%M:%S", tz = "Asia/Seoul"))
         url <- paste0("https://api.bithumb.com/v1/trades/ticks",
                       "?market=", sym, "&count=500&to=", to_str)
       } else {
