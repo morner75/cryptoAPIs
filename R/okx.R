@@ -308,13 +308,14 @@ get_okx_prices <- function(market, inst_type = "SPOT") {
 get_okx_trades <- function(market, from, to) {
   sym <- okx_trading_pairs(market)
   if (is.null(sym)) { message("OKX: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
+  from_ms  <- round(as.numeric(from) * 1000)
+  after_ms <- round(as.numeric(to)   * 1000) + 1
   all_rows <- list()
-  after    <- NULL
   tryCatch({
     repeat {
+      # type=2: timestamp-based cursor; after=N returns trades with ts < N
       url <- paste0("https://www.okx.com/api/v5/market/history-trades",
-                    "?instId=", sym, "&limit=100",
-                    if (!is.null(after)) paste0("&after=", after) else "")
+                    "?instId=", sym, "&limit=100&type=2&after=", after_ms)
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))
       if (status_code(res) != 200) break
@@ -332,15 +333,20 @@ get_okx_trades <- function(market, from, to) {
         stringsAsFactors = FALSE
       )
       all_rows <- c(all_rows, list(df))
-      oldest <- min(df$time_kst)
-      if (oldest <= from || nrow(df) < 100) break
-      after <- min(df$sequential_id)
+      oldest_ms <- min(as.numeric(raw$ts))
+      if (oldest_ms <= from_ms || nrow(df) < 100) break
+      after_ms <- oldest_ms
       Sys.sleep(0.1)
     }
     if (length(all_rows) == 0) return(NULL)
-    bind_rows(all_rows) %>%
+    result <- bind_rows(all_rows) %>%
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
+    if (nrow(result) == 0) {
+      message("OKX: \ud574\ub2f9 \ubc94\uc704\uc758 \uccb4\uacb0 \ub370\uc774\ud130\uac00 \uc5c6\uc2b5\ub2c8\ub2e4")
+      return(NULL)
+    }
+    result
   }, error = function(e) { message("OKX \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
