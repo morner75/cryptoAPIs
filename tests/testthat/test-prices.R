@@ -15,10 +15,13 @@ check_prices <- function(result, market, nrow = 1,
   numeric_cols <- c("trade_price", "opening_price", "high_price", "low_price",
                     "prev_closing_price", "signed_change_rate",
                     "acc_trade_volume_24h", "acc_trade_price_24h")
+  non_negative_cols <- c("trade_price", "opening_price", "high_price", "low_price",
+                         "prev_closing_price", "acc_trade_volume_24h", "acc_trade_price_24h")
   for (col in setdiff(numeric_cols, na_cols)) {
     expect_true(is.numeric(result[[col]]),     label = paste(col, "is numeric"))
     expect_true(all(!is.na(result[[col]])),    label = paste(col, "is not NA"))
-    expect_true(all(result[[col]] >= 0),       label = paste(col, "is non-negative"))
+    if (col %in% non_negative_cols)
+      expect_true(all(result[[col]] >= 0),     label = paste(col, "is non-negative"))
   }
   for (col in na_cols) {
     expect_true(all(is.na(result[[col]])), label = paste(col, "is NA"))
