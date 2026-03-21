@@ -9,20 +9,27 @@ get_korbit_trades(market, from, to)
 \arguments{
 \item{market}{Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).}
 
-\item{from}{POSIXct or Date. Start of the range (inclusive).}
+\item{from}{POSIXct or Date. Start of the range (inclusive). Only effective
+if the range overlaps with the most recent 500 trades.}
 
-\item{to}{POSIXct or Date. End of the range (inclusive).}
+\item{to}{POSIXct or Date. End of the range (inclusive). Only effective if
+the range overlaps with the most recent 500 trades.}
 }
 \value{
 A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
-  `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+  `sequential_id`, sorted by `time_kst`. Returns `NULL` on error or when
+  no trades from the latest 500 fall within the specified range.
 }
 \description{
 Returns the most recent trades for a given market from the Korbit public
-API (up to 500 trades). Korbit's public endpoint does not support
-cursor-based pagination, so results are limited to the latest trades that
-fall within `from`–`to`.
+API. Korbit's public endpoint does not support cursor-based pagination,
+so **only the latest 500 trades** are fetched in a single request; results
+are then filtered to those falling within `from`–`to`.
+
+**API limitation:** If the requested time range does not overlap with the
+most recent 500 trades, the function returns `NULL`. Historical data beyond
+the latest 500 trades is not accessible via the Korbit public API.
 }
 \examples{
 \dontrun{

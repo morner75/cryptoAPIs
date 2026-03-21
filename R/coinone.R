@@ -116,17 +116,24 @@ fetch_coinone <- function(market, count = 200) {
 #'
 #' @description
 #' Returns the most recent trades for a given market from the Coinone public
-#' API (up to 200 trades). Coinone's public endpoint does not support
-#' cursor-based pagination, so results are limited to the latest trades that
-#' fall within `from`–`to`.
+#' API. Coinone's public endpoint does not support cursor-based pagination,
+#' so **only the latest 200 trades** are fetched in a single request; results
+#' are then filtered to those falling within `from`–`to`.
+#'
+#' **API limitation:** If the requested time range does not overlap with the
+#' most recent 200 trades, the function returns `NULL`. Historical data beyond
+#' the latest 200 trades is not accessible via the Coinone public API.
 #'
 #' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
-#' @param from POSIXct or Date. Start of the range (inclusive).
-#' @param to POSIXct or Date. End of the range (inclusive).
+#' @param from POSIXct or Date. Start of the range (inclusive). Only effective
+#'   if the range overlaps with the most recent 200 trades.
+#' @param to POSIXct or Date. End of the range (inclusive). Only effective if
+#'   the range overlaps with the most recent 200 trades.
 #'
 #' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
 #'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
-#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error or when
+#'   no trades from the latest 200 fall within the specified range.
 #'
 #' @examples
 #' \dontrun{
@@ -146,7 +153,7 @@ get_coinone_trades <- function(market, from, to) {
   quote_cur <- str_extract(market, "[^-]+$")
   sym <- coinone_trading_pairs(market, quote = quote_cur)
   if (is.null(sym)) { message("\ucf54\uc778\uc6d0: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
-  url <- paste0("https://api.coinone.co.kr/public/v2/trades/", quote_cur, "/", sym, "/?size=200")
+  url <- paste0("https://api.coinone.co.kr/public/v2/trades/", quote_cur, "/", sym, "?size=200")
   tryCatch({
     res <- GET(url,
                add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
@@ -165,13 +172,18 @@ get_coinone_trades <- function(market, from, to) {
       trade_price   = as.numeric(tx$price),
       volume        = as.numeric(tx$qty),
       ask_bid       = ifelse(tx$is_seller_maker, "BID", "ASK"),
-      sequential_id = as.numeric(tx$id),
+      sequential_id = tx$id,
       stringsAsFactors = FALSE
     )
-    df %>%
+    result <- df %>%
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
+    if (nrow(result) == 0) {
+      message("\ucf54\uc778\uc6d0: \ud574\ub2f9 \ubc94\uc704\uc758 \uccb4\uacb0 \ub370\uc774\ud130\uac00 \uc5c6\uc2b5\ub2c8\ub2e4 (\ucd5c\uc2e0 200\uac74 \uc774\ub0b4\uc5d0\ub9cc \uc870\ud68c \uac00\ub2a5)")
+      return(NULL)
+    }
+    result
   }, error = function(e) { message("\ucf54\uc778\uc6d0 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 

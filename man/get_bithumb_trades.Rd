@@ -9,19 +9,27 @@ get_bithumb_trades(market, from, to)
 \arguments{
 \item{market}{Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).}
 
-\item{from}{POSIXct or Date. Start of the range (inclusive).}
+\item{from}{POSIXct or Date. Start of the range (inclusive). Must be within
+today's date (KST); past dates are not supported by the Bithumb API.}
 
-\item{to}{POSIXct or Date. End of the range (inclusive).}
+\item{to}{POSIXct or Date. End of the range (inclusive). Must be within
+today's date (KST).}
 }
 \value{
 A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
-  `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+  `sequential_id`, sorted by `time_kst`. Returns `NULL` on error or when
+  no trades are found within the specified range.
 }
 \description{
 Paginates through the Bithumb trade ticks endpoint to retrieve all individual
 trades between `from` and `to`. Uses cursor-based pagination via
 `sequential_id`.
+
+**API limitation:** The Bithumb `to` parameter accepts a time-of-day value
+(`HH:MM:SS`) only, with no date component. As a result, this function can
+only retrieve trades from **today's date (KST)**. Queries spanning a
+previous date will return no data.
 }
 \examples{
 \dontrun{

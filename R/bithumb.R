@@ -180,13 +180,21 @@ fetch_bithumb_range <- function(market, from, to, unit = "min") {
 #' trades between `from` and `to`. Uses cursor-based pagination via
 #' `sequential_id`.
 #'
+#' **API limitation:** The Bithumb `to` parameter accepts a time-of-day value
+#' (`HH:MM:SS`) only, with no date component. As a result, this function can
+#' only retrieve trades from **today's date (KST)**. Queries spanning a
+#' previous date will return no data.
+#'
 #' @param market Character. Market in `"ASSET-QUOTE"` format (e.g., `"BTC-KRW"`).
-#' @param from POSIXct or Date. Start of the range (inclusive).
-#' @param to POSIXct or Date. End of the range (inclusive).
+#' @param from POSIXct or Date. Start of the range (inclusive). Must be within
+#'   today's date (KST); past dates are not supported by the Bithumb API.
+#' @param to POSIXct or Date. End of the range (inclusive). Must be within
+#'   today's date (KST).
 #'
 #' @return A [data.frame] with columns `time_kst`, `trade_price`, `volume`,
 #'   `ask_bid` (`"ASK"` = seller-initiated / `"BID"` = buyer-initiated),
-#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error.
+#'   `sequential_id`, sorted by `time_kst`. Returns `NULL` on error or when
+#'   no trades are found within the specified range.
 #'
 #' @examples
 #' \dontrun{

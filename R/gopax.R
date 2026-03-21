@@ -168,10 +168,15 @@ get_gopax_trades <- function(market, from, to) {
       Sys.sleep(0.1)
     }
     if (length(all_rows) == 0) return(NULL)
-    bind_rows(all_rows) %>%
+    result <- bind_rows(all_rows) %>%
       filter(time_kst >= from, time_kst <= to) %>%
       distinct(sequential_id, .keep_all = TRUE) %>%
       arrange(time_kst)
+    if (nrow(result) == 0) {
+      message("\uace0\ud30d\uc2a4: \ud574\ub2f9 \ubc94\uc704\uc758 \uccb4\uacb0 \ub370\uc774\ud130\uac00 \uc5c6\uc2b5\ub2c8\ub2e4")
+      return(NULL)
+    }
+    result
   }, error = function(e) { message("\uace0\ud30d\uc2a4 \uccb4\uacb0 \uc624\ub958: ", e$message); NULL })
 }
 
