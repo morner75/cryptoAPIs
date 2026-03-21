@@ -133,6 +133,7 @@ test_that("get_gopax_orderbook returns expected structure", {
   expect_true(nrow(result) > 0)
   expect_equal(unique(result$market), "BTC-KRW")
   expect_s3_class(result$timestamp, "POSIXct")
+  expect_true(all(result$level == 0L))
 })
 
 test_that("get_gopax_orderbook respects count parameter", {

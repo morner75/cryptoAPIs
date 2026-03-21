@@ -341,12 +341,12 @@ get_gopax_orderbook <- function(market, count = 30, level = 0) {
     data.frame(
       market         = market,
       timestamp      = as.POSIXct(Sys.time(), tz = "Asia/Seoul"),
-      ask_price      = as.numeric(asks[, 1]),
-      bid_price      = as.numeric(bids[, 1]),
-      ask_size       = as.numeric(asks[, 2]),
-      bid_size       = as.numeric(bids[, 2]),
-      total_ask_size = sum(as.numeric(parsed$ask[, 2])),
-      total_bid_size = sum(as.numeric(parsed$bid[, 2])),
+      ask_price      = as.numeric(asks[, 2]),
+      bid_price      = as.numeric(bids[, 2]),
+      ask_size       = as.numeric(asks[, 3]),
+      bid_size       = as.numeric(bids[, 3]),
+      total_ask_size = sum(as.numeric(parsed$ask[, 3])),
+      total_bid_size = sum(as.numeric(parsed$bid[, 3])),
       level          = as.integer(level),
       stringsAsFactors = FALSE
     ) %>% arrange(ask_price)
