@@ -305,11 +305,13 @@ get_coinbase_trades <- function(market, from, to) {
   sym <- coinbase_trading_pairs(market)
   if (is.null(sym)) { message("\ucf54\uc778\ubca0\uc774\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", market, ")"); return(NULL) }
   all_rows <- list()
-  before   <- NULL
+  cursor   <- NULL
   tryCatch({
     repeat {
+      # 'after=N' returns trades older than trade_id N (lower IDs = older trades)
+      # 'before=N' returns trades newer than trade_id N — do NOT use for backward pagination
       url <- paste0("https://api.exchange.coinbase.com/products/", sym, "/trades?limit=100",
-                    if (!is.null(before)) paste0("&before=", before) else "")
+                    if (!is.null(cursor)) paste0("&after=", cursor) else "")
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))
       if (status_code(res) != 200) break
@@ -327,7 +329,7 @@ get_coinbase_trades <- function(market, from, to) {
       all_rows <- c(all_rows, list(df))
       oldest <- min(df$time_kst)
       if (oldest <= from || nrow(df) < 100) break
-      before <- min(df$sequential_id)
+      cursor <- min(df$sequential_id)
       Sys.sleep(0.1)
     }
     if (length(all_rows) == 0) return(NULL)

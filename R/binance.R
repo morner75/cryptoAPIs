@@ -302,9 +302,10 @@ get_binance_trades <- function(market, from, to) {
                       "?symbol=", sym,
                       "&startTime=", from_ms, "&endTime=", to_ms, "&limit=1000")
       } else {
+        # endTime cannot be combined with fromId (Binance returns 400)
         url <- paste0("https://api.binance.com/api/v3/aggTrades",
                       "?symbol=", sym,
-                      "&fromId=", from_id, "&endTime=", to_ms, "&limit=1000")
+                      "&fromId=", from_id, "&limit=1000")
       }
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))
@@ -321,7 +322,7 @@ get_binance_trades <- function(market, from, to) {
         stringsAsFactors = FALSE
       )
       all_rows <- c(all_rows, list(df))
-      if (nrow(df) < 1000) break
+      if (nrow(df) < 1000 || max(as.numeric(raw$T)) > to_ms) break
       from_id <- max(df$sequential_id) + 1
       Sys.sleep(0.1)
     }

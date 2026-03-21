@@ -66,7 +66,7 @@ get_{exchange}_trades(market, from, to)
 | Binance | `fromId` (aggTrade ID) | 1000 | `startTime`/`endTime` ms 사용 |
 | GOPAX | `pastmax` (trade ID) | 100 | `before` Unix 초로 시작점 지정 |
 | OKX | `after` (tradeId) | 100 | `history-trades` 엔드포인트 |
-| Coinbase | `before` (trade_id) | 100 | ISO 8601 타임스탬프 파싱 |
+| Coinbase | `after` (trade_id) | 100 | ISO 8601 타임스탬프 파싱; `after=N`이 구버전 trades (ID < N) 반환 |
 | Korbit | 없음 (단일 요청) | 500 | 범위 필터만 적용 |
 | Coinone | 없음 (단일 요청) | 200 | 범위 필터만 적용 |
 
