@@ -174,6 +174,90 @@ get_korbit_trades <- function(market, from, to) {
 }
 
 
+#' Get current price (ticker) from Korbit
+#'
+#' @description
+#' Returns the latest ticker snapshot for one or more markets from the Korbit
+#' public quotation API.
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-KRW"`, `c("BTC-KRW", "ETH-KRW")`).
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct timestamp of last trade in KST}
+#'     \item{trade_price}{Most recent trade price (current price)}
+#'     \item{opening_price}{24-hour open price}
+#'     \item{high_price}{24-hour high price}
+#'     \item{low_price}{24-hour low price}
+#'     \item{prev_closing_price}{Previous close price}
+#'     \item{change}{Direction vs. previous close: `"RISE"`, `"FALL"`, or `"EVEN"`}
+#'     \item{signed_change_rate}{Signed rate of change from previous close}
+#'     \item{acc_trade_volume_24h}{24-hour cumulative trade volume}
+#'     \item{acc_trade_price_24h}{24-hour cumulative trade value in quote currency}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_korbit_prices("BTC-KRW")
+#' get_korbit_prices(c("BTC-KRW", "ETH-KRW"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @export
+get_korbit_prices <- function(market) {
+  syms <- vapply(market, function(m) {
+    s <- korbit_trading_pairs(m)
+    if (is.null(s)) { message("\ucf54\ube57: symbol \uc870\ud68c \uc2e4\ud328 (", m, ")"); NA_character_ }
+    else s
+  }, character(1))
+  valid <- !is.na(syms)
+  if (!any(valid)) return(NULL)
+
+  url <- paste0(
+    "https://api.korbit.co.kr/v2/tickers",
+    "?symbol=", paste(syms[valid], collapse = ",")
+  )
+  tryCatch({
+    res <- GET(url,
+               add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+               timeout(10))
+    if (status_code(res) != 200) {
+      message("\ucf54\ube57 HTTP \uc624\ub958: ", status_code(res)); return(NULL)
+    }
+    parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+    if (is.null(parsed$success) || !isTRUE(parsed$success)) {
+      message("\ucf54\ube57 API \uc624\ub958"); return(NULL)
+    }
+    d <- parsed$data
+    if (is.null(d) || nrow(d) == 0) return(NULL)
+
+    chg_val <- as.numeric(d$priceChange)
+    chg <- ifelse(chg_val > 0, "RISE", ifelse(chg_val < 0, "FALL", "EVEN"))
+
+    result <- data.frame(
+      market               = toupper(gsub("_", "-", sub("^(.+)_(.+)$", "\\1-\\2", d$symbol))),
+      time_kst             = as.POSIXct(as.numeric(d$lastTradedAt) / 1000,
+                                        origin = "1970-01-01", tz = "Asia/Seoul"),
+      trade_price          = as.numeric(d$close),
+      opening_price        = as.numeric(d$open),
+      high_price           = as.numeric(d$high),
+      low_price            = as.numeric(d$low),
+      prev_closing_price   = as.numeric(d$prevClose),
+      change               = chg,
+      signed_change_rate   = as.numeric(d$priceChangePercent) / 100,
+      acc_trade_volume_24h = as.numeric(d$volume),
+      acc_trade_price_24h  = as.numeric(d$quoteVolume),
+      stringsAsFactors = FALSE
+    )
+    result[match(market[valid], result$market), ]
+  }, error = function(e) { message("\ucf54\ube57 \uc624\ub958: ", e$message); NULL })
+}
+
+
 #' Get real-time orderbook (호가) data from Korbit
 #'
 #' @description

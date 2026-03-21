@@ -253,6 +253,82 @@ get_upbit_trades <- function(market, from, to) {
 }
 
 
+#' Get current price (ticker) from Upbit
+#'
+#' @description
+#' Returns the latest ticker snapshot for one or more markets from the Upbit
+#' public quotation API.
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-KRW"`, `c("BTC-KRW", "ETH-KRW")`).
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct snapshot timestamp in KST}
+#'     \item{trade_price}{Most recent trade price (current price)}
+#'     \item{opening_price}{Day open price (UTC 00:00 basis)}
+#'     \item{high_price}{Day high price}
+#'     \item{low_price}{Day low price}
+#'     \item{prev_closing_price}{Previous day close price}
+#'     \item{change}{Direction vs. previous close: `"RISE"`, `"FALL"`, or `"EVEN"`}
+#'     \item{signed_change_rate}{Signed rate of change from previous close}
+#'     \item{acc_trade_volume_24h}{Rolling 24-hour cumulative trade volume}
+#'     \item{acc_trade_price_24h}{Rolling 24-hour cumulative trade value}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_upbit_prices("BTC-KRW")
+#' get_upbit_prices(c("BTC-KRW", "ETH-KRW"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @export
+get_upbit_prices <- function(market) {
+  syms <- vapply(market, function(m) {
+    s <- upbit_trading_pairs(m)
+    if (is.null(s)) { message("\uc5c5\ube44\ud2b8: symbol \uc870\ud68c \uc2e4\ud328 (", m, ")"); NA_character_ }
+    else s
+  }, character(1))
+  syms <- syms[!is.na(syms)]
+  if (length(syms) == 0) return(NULL)
+
+  url <- paste0(
+    "https://api.upbit.com/v1/ticker",
+    "?markets=", paste(syms, collapse = ",")
+  )
+  tryCatch({
+    res <- GET(url,
+               add_headers(accept = "application/json", `User-Agent` = "Mozilla/5.0"),
+               timeout(10))
+    if (status_code(res) != 200) {
+      message("\uc5c5\ube44\ud2b8 \uc624\ub958: HTTP ", status_code(res)); return(NULL)
+    }
+    raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+    data.frame(
+      market              = paste0(
+        sub("^[^-]+-", "", raw$market), "-", sub("-.*$", "", raw$market)
+      ),
+      time_kst            = as.POSIXct(raw$timestamp / 1000,
+                                       origin = "1970-01-01", tz = "Asia/Seoul"),
+      trade_price         = as.numeric(raw$trade_price),
+      opening_price       = as.numeric(raw$opening_price),
+      high_price          = as.numeric(raw$high_price),
+      low_price           = as.numeric(raw$low_price),
+      prev_closing_price  = as.numeric(raw$prev_closing_price),
+      change              = raw$change,
+      signed_change_rate  = as.numeric(raw$signed_change_rate),
+      acc_trade_volume_24h = as.numeric(raw$acc_trade_volume_24h),
+      acc_trade_price_24h  = as.numeric(raw$acc_trade_price_24h),
+      stringsAsFactors = FALSE
+    )
+  }, error = function(e) { message("\uc5c5\ube44\ud2b8 \uc624\ub958: ", e$message); NULL })
+}
+
+
 #' Get real-time orderbook (호가) data from Upbit
 #'
 #' @description

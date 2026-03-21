@@ -182,6 +182,101 @@ fetch_okx_range <- function(market, from, to, unit = "min") {
 }
 
 
+#' Get current price (ticker) from OKX
+#'
+#' @description
+#' Returns the latest ticker snapshot for one or more markets from the OKX
+#' public quotation API.
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-USDT"`, `c("BTC-USDT", "ETH-USDT")`).
+#' @param inst_type Character. Instrument type: `"SPOT"`, `"SWAP"`, `"FUTURES"`,
+#'   or `"OPTION"`. Defaults to `"SPOT"`.
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct ticker timestamp in KST}
+#'     \item{trade_price}{Most recent trade price}
+#'     \item{opening_price}{Rolling 24-hour open price}
+#'     \item{high_price}{Rolling 24-hour high price}
+#'     \item{low_price}{Rolling 24-hour low price}
+#'     \item{prev_closing_price}{Start-of-day price at UTC+8 midnight (`sodUtc8`)}
+#'     \item{change}{Direction vs. `sodUtc8`: `"RISE"`, `"FALL"`, or `"EVEN"`}
+#'     \item{signed_change_rate}{Signed rate of change vs. `sodUtc8`}
+#'     \item{acc_trade_volume_24h}{24-hour volume in base currency}
+#'     \item{acc_trade_price_24h}{24-hour volume in quote currency}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_okx_prices("BTC-USDT")
+#' get_okx_prices(c("BTC-USDT", "ETH-USDT"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows
+#' @export
+get_okx_prices <- function(market, inst_type = "SPOT") {
+  syms <- vapply(market, function(m) {
+    s <- okx_trading_pairs(m, inst_type = inst_type)
+    if (is.null(s)) { message("OKX: symbol \uc870\ud68c \uc2e4\ud328 (", m, ")"); NA_character_ }
+    else s
+  }, character(1))
+  valid_idx <- !is.na(syms)
+  if (!any(valid_idx)) return(NULL)
+  valid_syms    <- syms[valid_idx]
+  valid_markets <- market[valid_idx]
+
+  rows <- lapply(seq_along(valid_syms), function(i) {
+    sym <- valid_syms[i]
+    mkt <- valid_markets[i]
+    url <- paste0("https://www.okx.com/api/v5/market/ticker?instId=", sym)
+    tryCatch({
+      res <- GET(url,
+                 add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(10))
+      if (status_code(res) != 200) {
+        message("OKX HTTP \uc624\ub958: ", status_code(res), " / ", mkt); return(NULL)
+      }
+      parsed <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(parsed$code) || parsed$code != "0" || length(parsed$data) == 0) {
+        message("OKX API \uc624\ub958: ", parsed$msg, " / ", mkt); return(NULL)
+      }
+      d <- parsed$data[1, ]
+
+      last <- as.numeric(d$last)
+      sod  <- as.numeric(d$sodUtc8)
+      diff <- last - sod
+      chg  <- ifelse(diff > 0, "RISE", ifelse(diff < 0, "FALL", "EVEN"))
+      rate <- if (!is.na(sod) && sod != 0) diff / sod else NA_real_
+
+      data.frame(
+        market               = mkt,
+        time_kst             = as.POSIXct(as.numeric(d$ts) / 1000,
+                                          origin = "1970-01-01", tz = "Asia/Seoul"),
+        trade_price          = last,
+        opening_price        = as.numeric(d$open24h),
+        high_price           = as.numeric(d$high24h),
+        low_price            = as.numeric(d$low24h),
+        prev_closing_price   = sod,
+        change               = chg,
+        signed_change_rate   = rate,
+        acc_trade_volume_24h = as.numeric(d$vol24h),
+        acc_trade_price_24h  = as.numeric(d$volCcy24h),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) { message("OKX \uc624\ub958 (", mkt, "): ", e$message); NULL })
+  })
+
+  result <- bind_rows(rows)
+  if (nrow(result) == 0) return(NULL)
+  result
+}
+
+
 #' Fetch trade tick data from OKX over a date range
 #'
 #' @description

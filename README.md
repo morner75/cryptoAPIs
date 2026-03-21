@@ -15,22 +15,23 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 
 cryptoAPIs provides a consistent set of functions for pulling market
 data from eight cryptocurrency exchanges. Each exchange module exposes
-the same three-function surface — trading pair lookup, recent candles,
-and paginated date-range candles — so switching exchanges requires
-changing only the function prefix.
+the same function surface — trading pair lookup, recent candles,
+paginated date-range candles, current prices, trade ticks, and
+orderbooks — so switching exchanges requires changing only the function
+prefix.
 
 ## Supported exchanges
 
-| Exchange | Region | Quote currencies | Trades | Orderbook |
-|----|----|----|----|----|
-| [Upbit](https://upbit.com) | 🇰🇷 Korea | KRW, BTC, USDT | ✔ | ✔ |
-| [Bithumb](https://bithumb.com) | 🇰🇷 Korea | KRW, BTC | ✔ | ✔ |
-| [Coinone](https://coinone.co.kr) | 🇰🇷 Korea | KRW | ✔ | ✔ |
-| [Korbit](https://korbit.co.kr) | 🇰🇷 Korea | KRW | ✔ | ✔ |
-| [GOPAX](https://gopax.co.kr) | 🇰🇷 Korea | KRW | ✔ | ✔ |
-| [Binance](https://binance.com) | 🌐 Global | USDT, BTC, ETH, … | ✔ | — |
-| [Coinbase](https://coinbase.com) | 🌐 Global | USD, USDC, BTC, … | ✔ | — |
-| [OKX](https://okx.com) | 🌐 Global | USDT, BTC, ETH, … | ✔ | — |
+| Exchange | Region | Quote currencies | Prices | Trades | Orderbook |
+|----|----|----|----|----|----|
+| [Upbit](https://upbit.com) | 🇰🇷 Korea | KRW, BTC, USDT | ✔ | ✔ | ✔ |
+| [Bithumb](https://bithumb.com) | 🇰🇷 Korea | KRW, BTC | ✔ | ✔ | ✔ |
+| [Coinone](https://coinone.co.kr) | 🇰🇷 Korea | KRW | ✔ | ✔ | ✔ |
+| [Korbit](https://korbit.co.kr) | 🇰🇷 Korea | KRW | ✔ | ✔ | ✔ |
+| [GOPAX](https://gopax.co.kr) | 🇰🇷 Korea | KRW | ✔ | ✔ | ✔ |
+| [Binance](https://binance.com) | 🌐 Global | USDT, BTC, ETH, … | ✔ | ✔ | — |
+| [Coinbase](https://coinbase.com) | 🌐 Global | USD, USDC, BTC, … | ✔ | ✔ | — |
+| [OKX](https://okx.com) | 🌐 Global | USDT, BTC, ETH, … | ✔ | ✔ | — |
 
 ## Features
 
@@ -43,6 +44,9 @@ changing only the function prefix.
 - **Paginated range queries.** `fetch_*_range()` paginates automatically
   over any date interval, respecting rate limits with small sleeps
   between requests.
+- **Current price snapshots.** `get_*_prices()` returns a
+  one-row-per-market ticker with `trade_price`, OHLC, 24-hour volumes,
+  and change rate.
 - **Trade tick data.** `get_*_trades()` returns individual executions
   with `time_kst`, `trade_price`, `volume`, `ask_bid`, and
   `sequential_id`.
@@ -144,6 +148,31 @@ get_okx_trades("BTC-USDT", from = from, to = to)
 `ask_bid` follows the taker-side convention: `"BID"` = buyer-initiated,
 `"ASK"` = seller-initiated.
 
+### Get current prices
+
+`get_*_prices()` returns the latest ticker snapshot — current price,
+24-hour OHLC, volumes, and change rate — for one or more markets in a
+single call.
+
+``` r
+# Single market
+get_upbit_prices("BTC-KRW")
+get_binance_prices("BTC-USDT")
+get_okx_prices("BTC-USDT")
+
+# Multiple markets in one call
+get_upbit_prices(c("BTC-KRW", "ETH-KRW", "XRP-KRW"))
+get_binance_prices(c("BTC-USDT", "ETH-USDT"))
+```
+
+       market            time_kst trade_price opening_price high_price  low_price prev_closing_price change signed_change_rate acc_trade_volume_24h acc_trade_price_24h
+    1 BTC-KRW 2024-03-01 15:00:00   105933000     105399000  106000000  105304000          105314000   RISE            0.00588             1088.376        114493560880
+
+All eight exchanges share the same eleven output columns. Exchanges that
+do not provide a particular statistic return `NA` for that column
+(GOPAX: `prev_closing_price`, `change`, `signed_change_rate`; Coinbase:
+`prev_closing_price`, `acc_trade_price_24h`).
+
 ### Get orderbook data
 
 ``` r
@@ -191,14 +220,40 @@ get_bithumb_alarm(quote = "KRW", verbose = TRUE)
 
 ## Output columns
 
+### Candles (`fetch_*`, `fetch_*_range`)
+
+| Column          | Type                 | Description                  |
+|-----------------|----------------------|------------------------------|
+| `time_kst`      | POSIXct (Asia/Seoul) | Candle open timestamp in KST |
+| `opening_price` | numeric              | Open price                   |
+| `high_price`    | numeric              | High price                   |
+| `low_price`     | numeric              | Low price                    |
+| `trade_price`   | numeric              | Close price                  |
+| `volume`        | numeric              | Traded volume in base asset  |
+
+### Current prices (`get_*_prices`)
+
 | Column | Type | Description |
 |----|----|----|
-| `time_kst` | POSIXct (Asia/Seoul) | Candle / trade timestamp in KST |
-| `opening_price` | numeric | Open price |
-| `high_price` | numeric | High price |
-| `low_price` | numeric | Low price |
-| `trade_price` | numeric | Close (candles) or executed price (ticks) |
-| `volume` | numeric | Traded volume in base asset |
+| `market` | character | Market in `"ASSET-QUOTE"` format |
+| `time_kst` | POSIXct (Asia/Seoul) | Ticker snapshot timestamp in KST |
+| `trade_price` | numeric | Most recent trade price |
+| `opening_price` | numeric | 24-hour open price |
+| `high_price` | numeric | 24-hour high price |
+| `low_price` | numeric | 24-hour low price |
+| `prev_closing_price` | numeric | Previous close price (`NA` for GOPAX, Coinbase) |
+| `change` | character | `"RISE"` / `"FALL"` / `"EVEN"` vs. previous close (`NA` for GOPAX) |
+| `signed_change_rate` | numeric | Signed rate of change (`NA` for GOPAX) |
+| `acc_trade_volume_24h` | numeric | 24-hour cumulative volume in base asset |
+| `acc_trade_price_24h` | numeric | 24-hour cumulative volume in quote asset (`NA` for Coinbase) |
+
+### Trade ticks (`get_*_trades`)
+
+| Column | Type | Description |
+|----|----|----|
+| `time_kst` | POSIXct (Asia/Seoul) | Execution timestamp in KST |
+| `trade_price` | numeric | Executed price |
+| `volume` | numeric | Executed volume in base asset |
 | `ask_bid` | character | `"BID"` buyer-initiated · `"ASK"` seller-initiated |
 | `sequential_id` | numeric | Exchange-assigned trade ID (deduplication key) |
 

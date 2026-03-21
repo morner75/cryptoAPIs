@@ -176,6 +176,109 @@ get_coinone_trades <- function(market, from, to) {
 }
 
 
+#' Get current price (ticker) from Coinone
+#'
+#' @description
+#' Returns the latest ticker snapshot for one or more markets from the Coinone
+#' public quotation API.
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-KRW"`, `c("BTC-KRW", "ETH-KRW")`).
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct snapshot timestamp in KST}
+#'     \item{trade_price}{Most recent trade price (current price)}
+#'     \item{opening_price}{Day open price (KST midnight basis)}
+#'     \item{high_price}{Day high price}
+#'     \item{low_price}{Day low price}
+#'     \item{prev_closing_price}{Previous day close price}
+#'     \item{change}{Direction vs. previous close: `"RISE"`, `"FALL"`, or `"EVEN"`}
+#'     \item{signed_change_rate}{Signed rate of change from previous close}
+#'     \item{acc_trade_volume_24h}{24-hour cumulative trade volume}
+#'     \item{acc_trade_price_24h}{24-hour cumulative trade value}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_coinone_prices("BTC-KRW")
+#' get_coinone_prices(c("BTC-KRW", "ETH-KRW"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows
+#' @importFrom stringr str_extract
+#' @export
+get_coinone_prices <- function(market) {
+  parsed_markets <- data.frame(
+    market = market,
+    asset  = toupper(str_extract(market, "^[^-]+")),
+    quote  = toupper(str_extract(market, "[^-]+$")),
+    stringsAsFactors = FALSE
+  )
+
+  quotes <- unique(parsed_markets$quote)
+  rows   <- list()
+
+  for (q in quotes) {
+    url <- paste0(
+      "https://api.coinone.co.kr/public/v2/ticker_new/", q,
+      "?additional_data=true"
+    )
+    tryCatch({
+      res <- GET(url,
+                 add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(10))
+      if (status_code(res) != 200) {
+        message("\ucf54\uc778\uc6d0 HTTP \uc624\ub958: ", status_code(res)); next
+      }
+      resp <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(resp$result) || resp$result != "success") {
+        message("\ucf54\uc778\uc6d0 API \uc624\ub958: ", resp$error_code); next
+      }
+      tk <- resp$tickers
+      if (is.null(tk) || nrow(tk) == 0) next
+
+      wanted <- parsed_markets$asset[parsed_markets$quote == q]
+      tk <- tk[toupper(tk$target_currency) %in% wanted, ]
+      if (nrow(tk) == 0) next
+
+      last      <- as.numeric(tk$last)
+      prev_last <- as.numeric(tk$yesterday_last)
+      diff      <- last - prev_last
+      chg <- ifelse(diff > 0, "RISE", ifelse(diff < 0, "FALL", "EVEN"))
+      rate <- ifelse(prev_last == 0, 0, diff / prev_last)
+
+      rows <- c(rows, list(data.frame(
+        market               = paste0(toupper(tk$target_currency), "-", q),
+        time_kst             = as.POSIXct(as.numeric(tk$timestamp) / 1000,
+                                          origin = "1970-01-01", tz = "Asia/Seoul"),
+        trade_price          = last,
+        opening_price        = as.numeric(tk$first),
+        high_price           = as.numeric(tk$high),
+        low_price            = as.numeric(tk$low),
+        prev_closing_price   = prev_last,
+        change               = chg,
+        signed_change_rate   = rate,
+        acc_trade_volume_24h = as.numeric(tk$target_volume),
+        acc_trade_price_24h  = as.numeric(tk$quote_volume),
+        stringsAsFactors = FALSE
+      )))
+    }, error = function(e) { message("\ucf54\uc778\uc6d0 \uc624\ub958: ", e$message) })
+  }
+
+  if (length(rows) == 0) {
+    message("\ucf54\uc778\uc6d0: \uc694\uccad\ud55c \ub9c8\ucf13\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4 (", paste(market, collapse = ", "), ")")
+    return(NULL)
+  }
+  result <- bind_rows(rows)
+  result[match(market, result$market), ]
+}
+
+
 #' Get real-time orderbook (호가) data from Coinone
 #'
 #' @description

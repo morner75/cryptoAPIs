@@ -181,6 +181,98 @@ fetch_coinbase_range <- function(market, from, to, unit = "min") {
 }
 
 
+#' Get current price (ticker) from Coinbase
+#'
+#' @description
+#' Returns the latest ticker snapshot for one or more markets from the Coinbase
+#' Exchange public API. Combines the per-product `/ticker` endpoint (current
+#' price, timestamp) with the `/stats` endpoint (24h OHLC, volume).
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-USD"`, `c("BTC-USD", "ETH-USD")`).
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct timestamp of the latest trade in KST}
+#'     \item{trade_price}{Most recent trade price}
+#'     \item{opening_price}{24-hour open price}
+#'     \item{high_price}{24-hour high price}
+#'     \item{low_price}{24-hour low price}
+#'     \item{prev_closing_price}{`NA` — not provided by Coinbase Exchange API}
+#'     \item{change}{Direction vs. 24h open: `"RISE"`, `"FALL"`, or `"EVEN"`}
+#'     \item{signed_change_rate}{Signed rate of change vs. 24h open}
+#'     \item{acc_trade_volume_24h}{24-hour cumulative trade volume}
+#'     \item{acc_trade_price_24h}{`NA` — not provided by Coinbase Exchange API}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_coinbase_prices("BTC-USD")
+#' get_coinbase_prices(c("BTC-USD", "ETH-USD"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows
+#' @export
+get_coinbase_prices <- function(market) {
+  syms <- vapply(market, function(m) {
+    s <- coinbase_trading_pairs(m)
+    if (is.null(s)) { message("\ucf54\uc778\ubca0\uc774\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", m, ")"); NA_character_ }
+    else s
+  }, character(1))
+  valid_idx <- !is.na(syms)
+  if (!any(valid_idx)) return(NULL)
+  valid_syms    <- syms[valid_idx]
+  valid_markets <- market[valid_idx]
+
+  rows <- lapply(seq_along(valid_syms), function(i) {
+    sym <- valid_syms[i]
+    mkt <- valid_markets[i]
+    base_url <- "https://api.exchange.coinbase.com/products/"
+    hdrs <- add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json")
+    tryCatch({
+      r_tk <- GET(paste0(base_url, sym, "/ticker"), hdrs, timeout(10))
+      r_st <- GET(paste0(base_url, sym, "/stats"),  hdrs, timeout(10))
+      if (status_code(r_tk) != 200 || status_code(r_st) != 200) {
+        message("\ucf54\uc778\ubca0\uc774\uc2a4 HTTP \uc624\ub958 / ", mkt); return(NULL)
+      }
+      tk <- fromJSON(content(r_tk, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      st <- fromJSON(content(r_st, as = "text", encoding = "UTF-8"), flatten = TRUE)
+
+      price <- as.numeric(tk$price)
+      open  <- as.numeric(st$open)
+      diff  <- price - open
+      chg   <- ifelse(diff > 0, "RISE", ifelse(diff < 0, "FALL", "EVEN"))
+      rate  <- if (!is.na(open) && open != 0) diff / open else NA_real_
+
+      data.frame(
+        market               = mkt,
+        time_kst             = as.POSIXct(tk$time, format = "%Y-%m-%dT%H:%M:%OSZ",
+                                          tz = "UTC") |>
+                                 (\(x) { attr(x, "tzone") <- "Asia/Seoul"; x })(),
+        trade_price          = price,
+        opening_price        = open,
+        high_price           = as.numeric(st$high),
+        low_price            = as.numeric(st$low),
+        prev_closing_price   = NA_real_,
+        change               = chg,
+        signed_change_rate   = rate,
+        acc_trade_volume_24h = as.numeric(st$volume),
+        acc_trade_price_24h  = NA_real_,
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) { message("\ucf54\uc778\ubca0\uc774\uc2a4 \uc624\ub958 (", mkt, "): ", e$message); NULL })
+  })
+
+  result <- bind_rows(rows)
+  if (nrow(result) == 0) return(NULL)
+  result
+}
+
+
 #' Fetch trade tick data from Coinbase over a date range
 #'
 #' @description

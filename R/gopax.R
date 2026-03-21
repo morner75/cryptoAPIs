@@ -176,6 +176,113 @@ get_gopax_trades <- function(market, from, to) {
 }
 
 
+#' Get current price (ticker) from GOPAX
+#'
+#' @description
+#' Returns the latest ticker snapshot for one or more markets from the GOPAX
+#' public quotation API. Combines the per-pair `/ticker` endpoint (current
+#' price, volumes, timestamp) with the bulk `/trading-pairs/stats` endpoint
+#' (24h OHLC).
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-KRW"`, `c("BTC-KRW", "ETH-KRW")`).
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct timestamp of last ticker update in KST}
+#'     \item{trade_price}{Current price}
+#'     \item{opening_price}{24-hour open price}
+#'     \item{high_price}{24-hour high price}
+#'     \item{low_price}{24-hour low price}
+#'     \item{prev_closing_price}{`NA` — not provided by GOPAX API}
+#'     \item{change}{`NA` — not provided by GOPAX API}
+#'     \item{signed_change_rate}{`NA` — not provided by GOPAX API}
+#'     \item{acc_trade_volume_24h}{24-hour cumulative trade volume}
+#'     \item{acc_trade_price_24h}{24-hour cumulative trade value in quote currency}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_gopax_prices("BTC-KRW")
+#' get_gopax_prices(c("BTC-KRW", "ETH-KRW"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON
+#' @importFrom dplyr %>% bind_rows
+#' @export
+get_gopax_prices <- function(market) {
+  syms <- vapply(market, function(m) {
+    s <- gopax_trading_pairs(m)
+    if (is.null(s)) { message("\uace0\ud30d\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", m, ")"); NA_character_ }
+    else s
+  }, character(1))
+  valid_idx <- !is.na(syms)
+  if (!any(valid_idx)) return(NULL)
+  valid_syms    <- syms[valid_idx]
+  valid_markets <- market[valid_idx]
+
+  # Bulk OHLC stats (one call for all pairs)
+  stats_map <- tryCatch({
+    res <- GET("https://api.gopax.co.kr/trading-pairs/stats",
+               add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+               timeout(10))
+    if (status_code(res) != 200) list()
+    else {
+      raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      if (is.null(raw) || !is.data.frame(raw)) list()
+      else {
+        stats <- raw[raw$name %in% valid_syms, ]
+        setNames(
+          lapply(seq_len(nrow(stats)), function(i) stats[i, ]),
+          stats$name
+        )
+      }
+    }
+  }, error = function(e) { message("\uace0\ud30d\uc2a4 stats \uc624\ub958: ", e$message); list() })
+
+  # Per-market ticker calls
+  rows <- lapply(seq_along(valid_syms), function(i) {
+    sym <- valid_syms[i]
+    mkt <- valid_markets[i]
+    url <- paste0("https://api.gopax.co.kr/trading-pairs/", sym, "/ticker")
+    tryCatch({
+      res <- GET(url,
+                 add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+                 timeout(10))
+      if (status_code(res) != 200) {
+        message("\uace0\ud30d\uc2a4 HTTP \uc624\ub958: ", status_code(res), " / ", mkt)
+        return(NULL)
+      }
+      tk <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+      st <- stats_map[[sym]]
+      data.frame(
+        market               = mkt,
+        time_kst             = as.POSIXct(tk$time, format = "%Y-%m-%dT%H:%M:%OSZ",
+                                          tz = "UTC") |>
+                                 (\(x) { attr(x, "tzone") <- "Asia/Seoul"; x })(),
+        trade_price          = as.numeric(tk$price),
+        opening_price        = if (!is.null(st)) as.numeric(st$open)  else NA_real_,
+        high_price           = if (!is.null(st)) as.numeric(st$high)  else NA_real_,
+        low_price            = if (!is.null(st)) as.numeric(st$low)   else NA_real_,
+        prev_closing_price   = NA_real_,
+        change               = NA_character_,
+        signed_change_rate   = NA_real_,
+        acc_trade_volume_24h = as.numeric(tk$volume),
+        acc_trade_price_24h  = as.numeric(tk$quoteVolume),
+        stringsAsFactors = FALSE
+      )
+    }, error = function(e) { message("\uace0\ud30d\uc2a4 \uc624\ub958 (", mkt, "): ", e$message); NULL })
+  })
+
+  result <- bind_rows(rows)
+  if (nrow(result) == 0) return(NULL)
+  result
+}
+
+
 #' Get real-time orderbook (호가) data from GOPAX
 #'
 #' @description

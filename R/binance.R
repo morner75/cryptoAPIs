@@ -177,6 +177,89 @@ fetch_binance_range <- function(market, from, to, unit = "min") {
 }
 
 
+#' Get current price (ticker) from Binance
+#'
+#' @description
+#' Returns the latest 24-hour rolling ticker snapshot for one or more markets
+#' from the Binance public quotation API.
+#'
+#' @param market Character vector. One or more markets in `"ASSET-QUOTE"` format
+#'   (e.g., `"BTC-USDT"`, `c("BTC-USDT", "ETH-USDT")`).
+#'
+#' @return A [data.frame] with one row per market and columns:
+#'   \describe{
+#'     \item{market}{Standardised market (`"ASSET-QUOTE"`)}
+#'     \item{time_kst}{POSIXct close time of the 24h window in KST}
+#'     \item{trade_price}{Most recent trade price}
+#'     \item{opening_price}{24-hour open price}
+#'     \item{high_price}{24-hour high price}
+#'     \item{low_price}{24-hour low price}
+#'     \item{prev_closing_price}{Previous close price}
+#'     \item{change}{Direction vs. previous close: `"RISE"`, `"FALL"`, or `"EVEN"`}
+#'     \item{signed_change_rate}{Signed rate of change from previous close}
+#'     \item{acc_trade_volume_24h}{24-hour cumulative base asset volume}
+#'     \item{acc_trade_price_24h}{24-hour cumulative quote asset volume}
+#'   }
+#'   Returns `NULL` on error.
+#'
+#' @examples
+#' \dontrun{
+#' get_binance_prices("BTC-USDT")
+#' get_binance_prices(c("BTC-USDT", "ETH-USDT"))
+#' }
+#'
+#' @importFrom httr GET content status_code add_headers timeout
+#' @importFrom jsonlite fromJSON toJSON
+#' @importFrom dplyr %>%
+#' @export
+get_binance_prices <- function(market) {
+  syms <- vapply(market, function(m) {
+    s <- binance_trading_pairs(m)
+    if (is.null(s)) { message("\ubc14\uc774\ub0b8\uc2a4: symbol \uc870\ud68c \uc2e4\ud328 (", m, ")"); NA_character_ }
+    else s
+  }, character(1))
+  valid_idx <- !is.na(syms)
+  if (!any(valid_idx)) return(NULL)
+  valid_syms    <- syms[valid_idx]
+  valid_markets <- market[valid_idx]
+
+  url <- paste0(
+    "https://api.binance.com/api/v3/ticker/24hr",
+    "?symbols=", URLencode(toJSON(valid_syms, auto_unbox = FALSE), reserved = FALSE)
+  )
+  tryCatch({
+    res <- GET(url,
+               add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
+               timeout(10))
+    if (status_code(res) != 200) {
+      message("\ubc14\uc774\ub0b8\uc2a4 HTTP \uc624\ub958: ", status_code(res)); return(NULL)
+    }
+    raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
+    if (is.null(raw) || nrow(raw) == 0) return(NULL)
+
+    chg_val <- as.numeric(raw$priceChange)
+    chg <- ifelse(chg_val > 0, "RISE", ifelse(chg_val < 0, "FALL", "EVEN"))
+
+    result <- data.frame(
+      market               = valid_markets[match(raw$symbol, valid_syms)],
+      time_kst             = as.POSIXct(as.numeric(raw$closeTime) / 1000,
+                                        origin = "1970-01-01", tz = "Asia/Seoul"),
+      trade_price          = as.numeric(raw$lastPrice),
+      opening_price        = as.numeric(raw$openPrice),
+      high_price           = as.numeric(raw$highPrice),
+      low_price            = as.numeric(raw$lowPrice),
+      prev_closing_price   = as.numeric(raw$prevClosePrice),
+      change               = chg,
+      signed_change_rate   = as.numeric(raw$priceChangePercent) / 100,
+      acc_trade_volume_24h = as.numeric(raw$volume),
+      acc_trade_price_24h  = as.numeric(raw$quoteVolume),
+      stringsAsFactors = FALSE
+    )
+    result[match(valid_markets, result$market), ]
+  }, error = function(e) { message("\ubc14\uc774\ub0b8\uc2a4 \uc624\ub958: ", e$message); NULL })
+}
+
+
 #' Fetch trade tick data from Binance over a date range
 #'
 #' @description
