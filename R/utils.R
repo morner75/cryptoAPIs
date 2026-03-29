@@ -63,3 +63,57 @@ merge_ohlc_datasets <- function(...) {
 
   result
 }
+
+#' Merge multiple trade tick datasets
+#'
+#' @description
+#' Reads several saved trade tick list objects (`.rds` files produced by the
+#' `get_*_trades()` family) and combines them per exchange and per market,
+#' removing fully duplicate rows (all columns identical).
+#'
+#' Unlike [merge_ohlc_datasets()] which deduplicates by `time_kst` alone,
+#' this function uses full-row deduplication because multiple trades can share
+#' the same timestamp.
+#'
+#' @param ... Character vector(s) of file paths to `.rds` files. Each file
+#'   must contain a named list of the form
+#'   `list(exchange = list(market = data.frame(...)))`.
+#'
+#' @return A nested list with the same structure:
+#'   `list(exchange -> list(market -> data.frame))`. Fully duplicate rows are
+#'   removed and rows are sorted by `time_kst`.
+#'
+#' @examples
+#' \dontrun{
+#' merged <- merge_trades_datasets("trades_2024_01.rds", "trades_2024_02.rds")
+#' merged$binance$`BTC-USDT`
+#' }
+#'
+#' @importFrom dplyr bind_rows distinct arrange
+#' @export
+merge_trades_datasets <- function(...) {
+  files    <- c(...)
+  datasets <- lapply(files, readRDS)
+
+  exchanges <- unique(unlist(lapply(datasets, names)))
+
+  result <- lapply(setNames(exchanges, exchanges), function(exch) {
+    exch_lists <- lapply(datasets, function(d) d[[exch]])
+    exch_lists <- Filter(Negate(is.null), exch_lists)
+
+    if (length(exch_lists) == 0) return(list())
+
+    markets <- unique(unlist(lapply(exch_lists, names)))
+
+    lapply(setNames(markets, markets), function(mkt) {
+      dfs <- lapply(exch_lists, function(el) el[[mkt]])
+      dfs <- Filter(Negate(is.null), dfs)
+      if (length(dfs) == 0) return(NULL)
+      bind_rows(dfs) %>%
+        distinct() %>%
+        arrange(time_kst)
+    })
+  })
+
+  result
+}
