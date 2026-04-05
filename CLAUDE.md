@@ -27,23 +27,56 @@ Tests that call live APIs are guarded with `skip_if_offline()` and will be skipp
 
 The package provides unified OHLCV candlestick and market data wrappers for 8 cryptocurrency exchanges: Upbit, Bithumb, GOPAX, Coinone, Korbit (Korean), and Binance, Coinbase, OKX (international).
 
-Each exchange module (`R/{exchange}.R`) exposes the same three-function surface:
+Each exchange module (`R/{exchange}.R`) exposes the same function surface:
 
 | Function | Purpose |
 |---|---|
 | `{exchange}_trading_pairs(market, ...)` | List available markets; pass a symbol to look up a specific pair |
 | `fetch_{exchange}(market, count)` | Fetch the most recent N 1-minute candles |
 | `fetch_{exchange}_range(market, from, to, unit)` | Paginate over a date range, auto-sleeping between requests |
+| `get_{exchange}_prices(market)` | Current ticker snapshot (price, OHLC, 24h volumes, change rate) |
+| `get_{exchange}_trades(market, from, to)` | Individual trade executions within a time window |
+| `get_{exchange}_orderbook(market, count)` | Current orderbook (Korean exchanges only) |
+
+**Supported exchanges and capabilities:**
+
+| Exchange | Region | Prices | Trades | Orderbook |
+|---|---|---|---|---|
+| Upbit | 🇰🇷 Korea | ✔ | ✔ | ✔ |
+| Bithumb | 🇰🇷 Korea | ✔ | ✔ | ✔ |
+| Coinone | 🇰🇷 Korea | ✔ | ✔ | ✔ |
+| Korbit | 🇰🇷 Korea | ✔ | ✔ | ✔ |
+| GOPAX | 🇰🇷 Korea | ✔ | ✔ | ✔ |
+| Binance | 🌐 Global | ✔ | ✔ | — |
+| Coinbase | 🌐 Global | ✔ | ✔ | — |
+| OKX | 🌐 Global | ✔ | ✔ | — |
 
 **Standardized market format:** All exchanges use `"ASSET-QUOTE"` (e.g., `"BTC-KRW"`, `"BTC-USDT"`). Internal translation to exchange-native formats (e.g., `"BTCUSDT"` for Binance, `"KRW-BTC"` for Upbit) happens inside each module.
 
 **Standardized OHLCV output columns:** `time_kst` (POSIXct, Asia/Seoul), `opening_price`, `high_price`, `low_price`, `trade_price` (close), `volume`.
 
-**`R/utils.R`** contains `merge_ohlc_datasets(...)` for combining multiple saved RDS files.
+**Session-level caching:** Trading pair lists are fetched once per R session and cached in memory, avoiding redundant API calls.
+
+**`R/utils.R`** contains `merge_ohlc_datasets(...)` and `merge_trades_datasets(...)` for combining multiple saved RDS files.
 
 **Upbit extras:** `get_upbit_orderbook()` for real-time orderbook data; `get_upbit_alarm()` for risk alarms via headless Chromium (requires `chromote` + `rvest`).
 
 **Bithumb extras:** `get_bithumb_alarm()` for risk alarms via direct API.
+
+## Current Prices Functions (`get_*_prices`)
+
+모든 8개 거래소에서 제공. 현재 시세 스냅샷을 조회합니다.
+
+```r
+get_{exchange}_prices(market)
+# market: "ASSET-QUOTE" 형식 단일 또는 벡터 (e.g., c("BTC-KRW", "ETH-KRW"))
+```
+
+**출력 컬럼:** `market`, `time_kst`, `trade_price`, `opening_price`, `high_price`, `low_price`, `prev_closing_price`, `change` (`"RISE"`/`"FALL"`/`"EVEN"`), `signed_change_rate`, `acc_trade_volume_24h`, `acc_trade_price_24h`
+
+모든 8개 거래소가 동일한 11개 컬럼 반환. 일부 거래소는 특정 컬럼 `NA`:
+- GOPAX: `prev_closing_price`, `change`, `signed_change_rate`
+- Coinbase: `prev_closing_price`, `acc_trade_price_24h`
 
 ## Trade Tick Functions (`get_*_trades`)
 
