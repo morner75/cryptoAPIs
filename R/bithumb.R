@@ -222,11 +222,15 @@ get_bithumb_trades <- function(market, from, to) {
                       "?market=", sym, "&count=500&to=", to_str)
       } else {
         url <- paste0("https://api.bithumb.com/v1/trades/ticks",
-                      "?market=", sym, "&count=500&cursor=", cursor)
+                      "?market=", sym, "&count=500&cursor=", .fmt_id(cursor))
       }
       res <- GET(url, add_headers(accept = "application/json", `User-Agent` = "Mozilla/5.0"),
                  timeout(15))
-      if (status_code(res) != 200) break
+      if (status_code(res) != 200) {
+        message("\ube57\uc378 HTTP ", status_code(res), " / ", market,
+                " \u2014 \ud398\uc774\uc9c0\ub124\uc774\uc158 \uc911\ub2e8 (\ubd80\ubd84 \uc218\uc9d1)")
+        break
+      }
       raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
       if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
       df <- data.frame(

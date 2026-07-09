@@ -150,7 +150,7 @@ fetch_okx_range <- function(market, from, to, unit = "min") {
     repeat {
       url <- paste0("https://www.okx.com/api/v5/market/history-candles",
                     "?instId=", sym, "&bar=", bar_str,
-                    "&limit=100&after=", round(after_ms))
+                    "&limit=100&after=", .fmt_id(after_ms))
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"), timeout(30))
       if (status_code(res) != 200) break
 
@@ -315,7 +315,7 @@ get_okx_trades <- function(market, from, to) {
     repeat {
       # type=2: timestamp-based cursor; after=N returns trades with ts < N
       url <- paste0("https://www.okx.com/api/v5/market/history-trades",
-                    "?instId=", sym, "&limit=100&type=2&after=", after_ms)
+                    "?instId=", sym, "&limit=100&type=2&after=", .fmt_id(after_ms))
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))
       if (status_code(res) != 200) break

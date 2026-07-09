@@ -311,10 +311,14 @@ get_coinbase_trades <- function(market, from, to) {
       # 'after=N' returns trades older than trade_id N (lower IDs = older trades)
       # 'before=N' returns trades newer than trade_id N — do NOT use for backward pagination
       url <- paste0("https://api.exchange.coinbase.com/products/", sym, "/trades?limit=100",
-                    if (!is.null(cursor)) paste0("&after=", cursor) else "")
+                    if (!is.null(cursor)) paste0("&after=", .fmt_id(cursor)) else "")
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))
-      if (status_code(res) != 200) break
+      if (status_code(res) != 200) {
+        message("\ucf54\uc778\ubca0\uc774\uc2a4 HTTP ", status_code(res), " / ", market,
+                " \u2014 \ud398\uc774\uc9c0\ub124\uc774\uc158 \uc911\ub2e8 (\ubd80\ubd84 \uc218\uc9d1)")
+        break
+      }
       raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
       if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
       df <- data.frame(

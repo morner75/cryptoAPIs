@@ -14,6 +14,26 @@ NULL
 }
 
 
+# Internal helper: render a large whole number for a URL query string ----------
+#
+# Trade ids and epoch timestamps are large integers held as doubles. paste0()
+# converts a double with as.character(), which picks whichever of fixed or
+# scientific notation is *shorter*. Upbit's sequential_id is epoch_ms * 1e4, so
+# it always ends in four zeros; whenever the page's minimum id ends in six or
+# more zeros the shorter form wins and the cursor goes out as "1.7836e+16".
+# Upbit then answers 400 ("Type mismatch error") and the pagination loop breaks
+# silently, truncating the crawl at a random depth. Epoch millisecond bounds
+# (Binance startTime/endTime, OKX after, GOPAX start/end) hit the same trap once
+# they carry seven or fewer significant digits, which is exactly what a
+# round-numbered `from`/`to` or a snapped candle boundary produces.
+#
+# sprintf("%.0f", x) is always fixed notation, so the value survives the round
+# trip. (These are multiples of 1e4 / 1e3 and stay exactly representable as
+# doubles even past 2^53, where the spacing is 4 \u2014 so no precision is lost.)
+
+.fmt_id <- function(x) sprintf("%.0f", x)
+
+
 #' Merge multiple OHLCV datasets
 #'
 #' @description

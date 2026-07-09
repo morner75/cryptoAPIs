@@ -144,7 +144,7 @@ fetch_binance_range <- function(market, from, to, unit = "min") {
     repeat {
       url <- paste0("https://api.binance.com/api/v3/klines",
                     "?symbol=", sym, "&interval=", interval_str,
-                    "&startTime=", round(start_ms), "&endTime=", round(end_ms),
+                    "&startTime=", .fmt_id(start_ms), "&endTime=", .fmt_id(end_ms),
                     "&limit=1000")
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"), timeout(30))
       if (status_code(res) != 200) break
@@ -300,12 +300,12 @@ get_binance_trades <- function(market, from, to) {
       if (is.null(from_id)) {
         url <- paste0("https://api.binance.com/api/v3/aggTrades",
                       "?symbol=", sym,
-                      "&startTime=", from_ms, "&endTime=", to_ms, "&limit=1000")
+                      "&startTime=", .fmt_id(from_ms), "&endTime=", .fmt_id(to_ms), "&limit=1000")
       } else {
         # endTime cannot be combined with fromId (Binance returns 400)
         url <- paste0("https://api.binance.com/api/v3/aggTrades",
                       "?symbol=", sym,
-                      "&fromId=", from_id, "&limit=1000")
+                      "&fromId=", .fmt_id(from_id), "&limit=1000")
       }
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))

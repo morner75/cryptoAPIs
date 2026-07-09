@@ -78,7 +78,7 @@ fetch_gopax <- function(market, count = 200) {
   start_ms <- end_ms - max(count * 60 * 60 * 1000, 24 * 60 * 60 * 1000)
   url <- paste0(
     "https://api.gopax.co.kr/trading-pairs/", sym,
-    "/candles?start=", start_ms, "&end=", end_ms,
+    "/candles?start=", .fmt_id(start_ms), "&end=", .fmt_id(end_ms),
     "&interval=1&limit=", count
   )
   tryCatch({
@@ -144,11 +144,15 @@ get_gopax_trades <- function(market, from, to) {
     repeat {
       url <- paste0("https://api.gopax.co.kr/trading-pairs/", sym, "/trades",
                     "?limit=100",
-                    if (!is.null(pastmax)) paste0("&pastmax=", pastmax)
-                    else paste0("&before=", before_s))
+                    if (!is.null(pastmax)) paste0("&pastmax=", .fmt_id(pastmax))
+                    else paste0("&before=", .fmt_id(before_s)))
       res <- GET(url, add_headers(`User-Agent` = "Mozilla/5.0", `Accept` = "application/json"),
                  timeout(15))
-      if (status_code(res) != 200) break
+      if (status_code(res) != 200) {
+        message("\uace0\ud30d\uc2a4 HTTP ", status_code(res), " / ", market,
+                " \u2014 \ud398\uc774\uc9c0\ub124\uc774\uc158 \uc911\ub2e8 (\ubd80\ubd84 \uc218\uc9d1)")
+        break
+      }
       raw <- fromJSON(content(res, as = "text", encoding = "UTF-8"), flatten = TRUE)
       if (is.null(raw) || length(raw) == 0 || !is.data.frame(raw)) break
       df <- data.frame(
